@@ -58,4 +58,14 @@
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <ProjectReference Include="..\HxPushModel\HxPushModel.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Update="SettingsPage.xaml.cs">
+			<DependentUpon>SettingsPage.xaml</DependentUpon>
+		</Compile>
+	</ItemGroup>
+
 </Project>

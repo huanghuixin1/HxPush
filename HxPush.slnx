@@ -1,7 +1,7 @@
 <Solution>
   <Project Path="HxPushApp/HxPushApp.csproj">
-    <Deploy Solution="Debug|*" />
+    <Deploy />
   </Project>
-  <Project Path="HxPushServer/HxPushServer.csproj" Id="416c04c9-8306-4e5c-9dbb-0fad66a506d9" />
+  <Project Path="HxPushModel/HxPushModel.csproj" Id="221f8e01-676d-4d95-9e9b-75e0a924204f" />
   <Project Path="HxPushServerWeb/HxPushServerWeb.csproj" Id="07b03450-5b1a-4c91-b43b-1f7eff8af46d" />
 </Solution>

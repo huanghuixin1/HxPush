@@ -49,6 +49,14 @@ namespace HxPushServerWeb
 
                 // 第四步：循环读取客户端发来的消息。
                 var buffer = new byte[1024 * 4];
+                ThreadPool.QueueUserWorkItem(async a => {
+                    while (webSocket.State == WebSocketState.Open)
+                    {
+                        await SendTextAsync(webSocket, "serverMsg" + DateTime.Now.ToString("HH:mm:ss"), context.RequestAborted);
+
+                        Thread.Sleep(5000);
+                    }
+                });
 
                 while (webSocket.State == WebSocketState.Open)
                 {
