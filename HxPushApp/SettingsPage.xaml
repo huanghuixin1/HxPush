@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="HxPushApp.SettingsPage"
+             Title="设置">
+
+    <VerticalStackLayout
+        Padding="24"
+        Spacing="16">
+
+        <Label
+            Text="设置"
+            FontSize="28"
+            FontAttributes="Bold" />
+
+        <Label
+            Text="这里放账号、通知开关或应用配置。"
+            FontSize="16" />
+
+        <Button
+            x:Name="WebSocketTestButton"
+            Text="测试链接 WebSocket"
+            Clicked="OnWebSocketTestClicked"
+            HorizontalOptions="Fill" />
+
+
+
+        <HorizontalStackLayout>
+            <Editor
+            x:Name="EditTestSendWsMsg"
+            Placeholder="这里填写消息内容"
+            Text="消息内容" />
+            
+            
+            <Button
+            x:Name="BtnTestSendWsMsg"
+            Text="发送消息"
+            HorizontalOptions="Fill" />
+        </HorizontalStackLayout>
+
+
+        <Label
+            x:Name="WebSocketTestResultLabel"
+            Text="尚未测试"
+            FontSize="14"
+            LineBreakMode="WordWrap"
+            TextColor="{AppThemeBinding Light=#666666, Dark=#B8B8B8}" />
+    </VerticalStackLayout>
+</ContentPage>

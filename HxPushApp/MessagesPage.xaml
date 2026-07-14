@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="HxPushApp.MessagesPage"
+             Title="消息">
+
+    <Grid RowDefinitions="Auto,*"
+          Padding="20,18"
+          RowSpacing="14">
+
+        <VerticalStackLayout Spacing="4">
+            <Label
+                Text="消息列表"
+                FontSize="28"
+                FontAttributes="Bold" />
+
+            <Label
+                Text="{Binding SummaryText}"
+                FontSize="14"
+                TextColor="{AppThemeBinding Light=#666666, Dark=#B8B8B8}" />
+        </VerticalStackLayout>
+
+        <CollectionView
+            Grid.Row="1"
+            ItemsSource="{Binding Messages}"
+            SelectionMode="Single"
+            SelectionChanged="OnMessageSelected">
+            <CollectionView.EmptyView>
+                <VerticalStackLayout
+                    Padding="0,60"
+                    HorizontalOptions="Center"
+                    Spacing="8">
+                    <Label
+                        Text="暂无消息"
+                        FontSize="18"
+                        HorizontalTextAlignment="Center" />
+                    <Label
+                        Text="稍后有新推送会显示在这里"
+                        FontSize="14"
+                        TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}"
+                        HorizontalTextAlignment="Center" />
+                </VerticalStackLayout>
+            </CollectionView.EmptyView>
+
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Border
+                        Margin="0,0,0,10"
+                        Padding="14"
+                        MaximumHeightRequest="112"
+                        Stroke="{AppThemeBinding Light=#E4E4E4, Dark=#3A3A3A}"
+                        StrokeThickness="1"
+                        BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#242424}">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="8" />
+                        </Border.StrokeShape>
+
+                        <Grid
+                            ColumnDefinitions="*,Auto"
+                            RowDefinitions="Auto,Auto"
+                            ColumnSpacing="12"
+                            RowSpacing="8">
+                            <Label
+                                Text="{Binding Content}"
+                                FontSize="17"
+                                FontAttributes="Bold"
+                                MaxLines="2"
+                                LineBreakMode="TailTruncation" />
+
+                            <Label
+                                Grid.Column="1"
+                                Text="{Binding Id, StringFormat='#{0}'}"
+                                FontSize="13"
+                                TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}" />
+
+                            <HorizontalStackLayout
+                                Grid.Row="1"
+                                Grid.ColumnSpan="2"
+                                Spacing="8">
+                                <Label
+                                    Text="设备"
+                                    FontSize="13"
+                                    BackgroundColor="AntiqueWhite"
+                                    TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}" />
+
+                                <Label
+                                    Text="{Binding Hwid}"
+                                    FontSize="13"
+                                    TextColor="{AppThemeBinding Light=#444444, Dark=#DDDDDD}" />
+                            </HorizontalStackLayout>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentPage>

@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HxPush WebSocket Test</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #f3f6fb;
+      color: #162033;
+    }
+
+    main {
+      width: min(860px, calc(100vw - 32px));
+    }
+
+    h1 {
+      margin: 0 0 16px;
+      font-size: 28px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    input,
+    textarea,
+    button {
+      font: inherit;
+    }
+
+    input,
+    textarea {
+      box-sizing: border-box;
+      width: 100%;
+      border: 1px solid #c7d0df;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #fff;
+      color: #162033;
+    }
+
+    textarea {
+      min-height: 92px;
+      resize: vertical;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      cursor: pointer;
+      color: #fff;
+      background: #2563eb;
+    }
+
+    button.secondary {
+      background: #64748b;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    .panel {
+      padding: 20px;
+      border: 1px solid #d8e0ed;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #94a3b8;
+    }
+
+    .dot.connected {
+      background: #16a34a;
+    }
+
+    .dot.error {
+      background: #dc2626;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 16px;
+    }
+
+    .message-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 16px;
+    }
+
+    .log {
+      height: 300px;
+      overflow: auto;
+      border: 1px solid #d8e0ed;
+      border-radius: 8px;
+      padding: 12px;
+      background: #0f172a;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    @media (max-width: 720px) {
+      .row,
+      .message-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>HxPush WebSocket Test</h1>
+    <div class="panel">
+      <div class="status">
+        <span id="statusDot" class="dot"></span>
+        <span id="statusText">Disconnected</span>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="serverUrl">WebSocket URL</label>
+          <input id="serverUrl" autocomplete="off">
+        </div>
+        <button id="connectButton" type="button">Connect</button>
+        <button id="disconnectButton" class="secondary" type="button" disabled>Disconnect</button>
+      </div>
+
+      <div class="message-row">
+        <div>
+          <label for="messageInput">Message</label>
+          <textarea id="messageInput" placeholder="Type a message, then click Send."></textarea>
+        </div>
+        <button id="sendButton" type="button" disabled>Send</button>
+      </div>
+
+      <label for="logBox">Log</label>
+      <div id="logBox" class="log" role="log" aria-live="polite"></div>
+    </div>
+  </main>
+
+  <script>
+    const serverUrlInput = document.querySelector("#serverUrl");
+    const messageInput = document.querySelector("#messageInput");
+    const connectButton = document.querySelector("#connectButton");
+    const disconnectButton = document.querySelector("#disconnectButton");
+    const sendButton = document.querySelector("#sendButton");
+    const statusDot = document.querySelector("#statusDot");
+    const statusText = document.querySelector("#statusText");
+    const logBox = document.querySelector("#logBox");
+
+    let socket;
+
+    serverUrlInput.value = getDefaultWebSocketUrl();
+
+    connectButton.addEventListener("click", connect);
+    disconnectButton.addEventListener("click", disconnect);
+    sendButton.addEventListener("click", sendMessage);
+    messageInput.addEventListener("keydown", (event) => {
+      if (event.ctrlKey && event.key === "Enter") {
+        sendMessage();
+      }
+    });
+
+    function getDefaultWebSocketUrl() {
+      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+      return `${protocol}//${location.host}/ws`;
+    }
+
+    function connect() {
+      const url = serverUrlInput.value.trim();
+
+      if (!url) {
+        appendLog("Please enter a WebSocket URL.", "error");
+        return;
+      }
+
+      disconnect();
+      setStatus("Connecting", "pending");
+      appendLog(`connect ${url}`);
+
+      socket = new WebSocket(url);
+
+      socket.addEventListener("open", () => {
+        setStatus("Connected", "connected");
+        appendLog("connected");
+      });
+
+      socket.addEventListener("message", (event) => {
+        appendLog(`received ${event.data}`);
+      });
+
+      socket.addEventListener("close", (event) => {
+        setStatus("Disconnected", "idle");
+        appendLog(`closed code=${event.code}${event.reason ? ` reason=${event.reason}` : ""}`);
+        socket = undefined;
+      });
+
+      socket.addEventListener("error", () => {
+        setStatus("Error", "error");
+        appendLog("connection error", "error");
+      });
+    }
+
+    function disconnect() {
+      if (socket && socket.readyState !== WebSocket.CLOSED) {
+        socket.close(1000, "client disconnect");
+      }
+    }
+
+    function sendMessage() {
+      const message = messageInput.value.trim();
+
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        appendLog("WebSocket is not connected.", "error");
+        return;
+      }
+
+      if (!message) {
+        appendLog("Please enter a message.", "error");
+        return;
+      }
+
+      socket.send(message);
+      appendLog(`sent ${message}`);
+      messageInput.value = "";
+      messageInput.focus();
+    }
+
+    function setStatus(text, state) {
+      statusText.textContent = text;
+      statusDot.className = "dot";
+
+      if (state === "connected") {
+        statusDot.classList.add("connected");
+      }
+
+      if (state === "error") {
+        statusDot.classList.add("error");
+      }
+
+      const isConnected = state === "connected";
+      connectButton.disabled = state === "connected" || state === "pending";
+      disconnectButton.disabled = !isConnected;
+      sendButton.disabled = !isConnected;
+    }
+
+    function appendLog(message, level = "info") {
+      const time = new Date().toLocaleTimeString();
+      const prefix = level === "error" ? "!" : ">";
+      logBox.textContent += `[${time}] ${prefix} ${message}\n`;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+  </script>
+</body>
+</html>

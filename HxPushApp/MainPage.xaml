@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="HxPushApp.MainPage"
+             Title="首页">
+
+    <ScrollView>
+        <VerticalStackLayout
+            Padding="24"
+            Spacing="16">
+
+            <Label
+                Text="这里是首页"
+                FontSize="28"
+                FontAttributes="Bold" />
+
+            <Label
+                Text="点击下方按钮可以直接切换到消息列表。"
+                FontSize="16" />
+
+            <Button
+                Text="进入消息"
+                Clicked="OnViewMessagesClicked"
+                HorizontalOptions="Fill" />
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

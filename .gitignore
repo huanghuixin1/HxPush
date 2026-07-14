@@ -1,0 +1,75 @@
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# Codex / local agent state
+.agents/
+.codex/
+
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+[Pp]ublish/
+artifacts/
+
+# .NET / NuGet
+packages/
+*.nupkg
+*.snupkg
+*.symbols.nupkg
+project.lock.json
+project.fragment.lock.json
+
+# Test / coverage output
+TestResults/
+*.trx
+coverage/
+coverage.*
+*.coverage
+*.coveragexml
+
+# MAUI / Android packages and signing material
+*.apk
+*.aab
+*.apks
+*.keystore
+*.jks
+*.pfx
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Frontend / web output, if added later
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+wwwroot/dist/
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+appsettings.*.Local.json
+appsettings.*.local.json
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
