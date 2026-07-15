@@ -23,7 +23,7 @@ namespace HxPushApp.Helpers
         {
             httpClient = new HttpClient
             {
-                Timeout = TimeSpan.FromSeconds(30)
+                Timeout = Timeout.InfiniteTimeSpan
             };
             httpClient.DefaultRequestHeaders.Accept.Add(
                 new MediaTypeWithQualityHeaderValue("application/json"));
@@ -39,19 +39,21 @@ namespace HxPushApp.Helpers
             CancellationToken cancellationToken = default)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
-            using var response = await SendAsync(request, cancellationToken);
-            return await response.Content.ReadAsStringAsync(cancellationToken);
+            using var response = await SendAsync(request, cancellationToken).ConfigureAwait(false);
+            return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
         /// 发送 GET 请求并将 JSON 响应反序列化为指定类型。
+        /// 先读取完整文本再反序列化，避免部分平台上直接读响应流时等待不返回。
         /// </summary>
-        public Task<TResponse> GetJsonAsync<TResponse>(
+        public async Task<TResponse> GetJsonAsync<TResponse>(
             string requestUri,
             CancellationToken cancellationToken = default)
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
-            return SendJsonAndDisposeRequestAsync<TResponse>(request, cancellationToken);
+            var json = await GetStringAsync(requestUri, cancellationToken).ConfigureAwait(false);
+            return JsonSerializer.Deserialize<TResponse>(json, JsonOptions)
+                ?? throw new JsonException("HTTP 响应 JSON 为空或无法转换为目标类型。");
         }
 
         /// <summary>
@@ -72,7 +74,6 @@ namespace HxPushApp.Helpers
 
         /// <summary>
         /// 发送自定义请求并返回响应。调用方负责释放返回的 HttpResponseMessage。
-        /// 可通过 HttpRequestMessage 添加 AppKey、Authorization 等请求头。
         /// </summary>
         public async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -81,14 +82,14 @@ namespace HxPushApp.Helpers
             var response = await httpClient.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             if (response.IsSuccessStatusCode)
             {
                 return response;
             }
 
-            var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+            var errorContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             var statusCode = response.StatusCode;
             var reasonPhrase = response.ReasonPhrase;
             response.Dispose();
@@ -115,11 +116,11 @@ namespace HxPushApp.Helpers
             CancellationToken cancellationToken)
         {
             using (request)
-            using (var response = await SendAsync(request, cancellationToken))
+            using (var response = await SendAsync(request, cancellationToken).ConfigureAwait(false))
             {
                 var result = await response.Content.ReadFromJsonAsync<TResponse>(
                     JsonOptions,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
 
                 return result ?? throw new JsonException("HTTP 响应 JSON 为空或无法转换为目标类型。");
             }

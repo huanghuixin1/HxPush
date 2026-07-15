@@ -142,6 +142,8 @@ namespace HxPushServerWeb
             string? hwid,
             int pageIndex,
             int pageSize,
+            long? beforeMsgDate,
+            string? beforeId,
             CancellationToken cancellationToken)
         {
             return GetAndMarkReadAsync(
@@ -150,6 +152,8 @@ namespace HxPushServerWeb
                 unreadOnly: false,
                 pageIndex,
                 pageSize,
+                beforeMsgDate,
+                beforeId,
                 cancellationToken);
         }
 
@@ -165,19 +169,65 @@ namespace HxPushServerWeb
                 unreadOnly: true,
                 pageIndex: null,
                 pageSize: null,
+                beforeMsgDate: null,
+                beforeId: null,
                 cancellationToken);
         }
 
-        // 单条推送成功后更新已读状态。
-        public async Task MarkAsReadAsync(string id, CancellationToken cancellationToken)
+        // 只读取 AppKey 的全部未读消息；用于 WebSocket 确认发送成功后再更新状态。
+        public async Task<IReadOnlyList<HxPushMsgModel>> GetUnreadAsync(
+            string appKey,
+            string? hwid,
+            CancellationToken cancellationToken)
         {
             await using var connection = CreateConnection();
             await connection.OpenAsync(cancellationToken);
 
             await using var command = connection.CreateCommand();
-            command.CommandText = "UPDATE HxPushMessages SET IsRead = 1 WHERE ID = $id AND IsRead = 0;";
-            command.Parameters.AddWithValue("$id", id);
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            command.CommandText =
+                """
+                SELECT ID, AppKey, Hwid, MsgDate, Msg, IsRead
+                FROM HxPushMessages
+                WHERE AppKey = $appKey
+                  AND ($hwid = '' OR Hwid = $hwid)
+                  AND IsRead = 0
+                ORDER BY MsgDate DESC, ID DESC;
+                """;
+            command.Parameters.AddWithValue("$appKey", appKey);
+            command.Parameters.AddWithValue("$hwid", hwid?.Trim() ?? string.Empty);
+
+            return await ReadMessagesAsync(command, cancellationToken);
+        }
+
+        // 单条推送成功后更新已读状态。
+        public Task MarkAsReadAsync(string id, CancellationToken cancellationToken)
+        {
+            return MarkAsReadAsync(new[] { id }, cancellationToken);
+        }
+
+        // 批量推送成功后在同一事务内更新全部消息，避免逐条建立数据库连接。
+        public async Task MarkAsReadAsync(
+            IReadOnlyCollection<string> ids,
+            CancellationToken cancellationToken)
+        {
+            var validIds = ids
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (validIds.Length == 0)
+            {
+                return;
+            }
+
+            await using var connection = CreateConnection();
+            await connection.OpenAsync(cancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await MarkAsReadAsync(
+                connection,
+                (SqliteTransaction)transaction,
+                validIds,
+                cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         }
 
         // 在同一事务内完成查询和已读更新，避免并发读取重复消费未读消息。
@@ -187,6 +237,8 @@ namespace HxPushServerWeb
             bool unreadOnly,
             int? pageIndex,
             int? pageSize,
+            long? beforeMsgDate,
+            string? beforeId,
             CancellationToken cancellationToken)
         {
             await using var connection = CreateConnection();
@@ -195,25 +247,48 @@ namespace HxPushServerWeb
 
             await using var command = connection.CreateCommand();
             command.Transaction = (SqliteTransaction)transaction;
-            command.CommandText = unreadOnly
-                ?
-                """
-                SELECT ID, AppKey, Hwid, MsgDate, Msg, IsRead
-                FROM HxPushMessages
-                WHERE AppKey = $appKey
-                  AND ($hwid = '' OR Hwid = $hwid)
-                  AND IsRead = 0
-                ORDER BY MsgDate DESC, ID DESC;
-                """
-                :
-                """
-                SELECT ID, AppKey, Hwid, MsgDate, Msg, IsRead
-                FROM HxPushMessages
-                WHERE AppKey = $appKey
-                  AND ($hwid = '' OR Hwid = $hwid)
-                ORDER BY MsgDate DESC, ID DESC
-                LIMIT $pageSize OFFSET $offset;
-                """;
+            var useCursor = !unreadOnly &&
+                            beforeMsgDate.HasValue &&
+                            !string.IsNullOrWhiteSpace(beforeId);
+
+            if (unreadOnly)
+            {
+                command.CommandText =
+                    """
+                    SELECT ID, AppKey, Hwid, MsgDate, Msg, IsRead
+                    FROM HxPushMessages
+                    WHERE AppKey = $appKey
+                      AND ($hwid = '' OR Hwid = $hwid)
+                      AND IsRead = 0
+                    ORDER BY MsgDate DESC, ID DESC;
+                    """;
+            }
+            else if (useCursor)
+            {
+                // 游标分页用于 App 滚动到底后继续拉取更旧消息，避免页码与本地缓存错位。
+                command.CommandText =
+                    """
+                    SELECT ID, AppKey, Hwid, MsgDate, Msg, IsRead
+                    FROM HxPushMessages
+                    WHERE AppKey = $appKey
+                      AND ($hwid = '' OR Hwid = $hwid)
+                      AND (MsgDate < $beforeMsgDate OR (MsgDate = $beforeMsgDate AND ID < $beforeId))
+                    ORDER BY MsgDate DESC, ID DESC
+                    LIMIT $pageSize;
+                    """;
+            }
+            else
+            {
+                command.CommandText =
+                    """
+                    SELECT ID, AppKey, Hwid, MsgDate, Msg, IsRead
+                    FROM HxPushMessages
+                    WHERE AppKey = $appKey
+                      AND ($hwid = '' OR Hwid = $hwid)
+                    ORDER BY MsgDate DESC, ID DESC
+                    LIMIT $pageSize OFFSET $offset;
+                    """;
+            }
 
             // 组合索引与此排序一致，可避免数据量增大后的全表排序。
             command.Parameters.AddWithValue("$appKey", appKey);
@@ -221,27 +296,20 @@ namespace HxPushServerWeb
             if (!unreadOnly)
             {
                 command.Parameters.AddWithValue("$pageSize", pageSize!.Value);
-                command.Parameters.AddWithValue("$offset", (long)(pageIndex!.Value - 1) * pageSize.Value);
-            }
 
-            var messages = new List<HxPushMsgModel>();
-
-            await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
-            {
-                // 保留查询时的 IsRead，让调用方知道哪些消息原本未读。
-                while (await reader.ReadAsync(cancellationToken))
+                if (useCursor)
                 {
-                    messages.Add(new HxPushMsgModel
-                    {
-                        ID = reader.GetString(0),
-                        AppKey = reader.GetString(1),
-                        Hwid = reader.GetString(2),
-                        MsgDate = reader.GetInt64(3),
-                        Msg = reader.GetString(4),
-                        IsRead = reader.GetInt32(5) != 0
-                    });
+                    command.Parameters.AddWithValue("$beforeMsgDate", beforeMsgDate!.Value);
+                    command.Parameters.AddWithValue("$beforeId", beforeId!.Trim());
+                }
+                else
+                {
+                    command.Parameters.AddWithValue("$offset", (long)(pageIndex!.Value - 1) * pageSize.Value);
                 }
             }
+
+            // 保留查询时的 IsRead，让调用方知道哪些消息原本未读。
+            var messages = await ReadMessagesAsync(command, cancellationToken);
 
             var unreadIds = messages
                 .Where(message => !message.IsRead)
@@ -249,6 +317,30 @@ namespace HxPushServerWeb
                 .ToArray();
             await MarkAsReadAsync(connection, (SqliteTransaction)transaction, unreadIds, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+
+            return messages;
+        }
+
+        // 将统一的查询结果映射为共享消息模型。
+        private static async Task<List<HxPushMsgModel>> ReadMessagesAsync(
+            SqliteCommand command,
+            CancellationToken cancellationToken)
+        {
+            var messages = new List<HxPushMsgModel>();
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                messages.Add(new HxPushMsgModel
+                {
+                    ID = reader.GetString(0),
+                    AppKey = reader.GetString(1),
+                    Hwid = reader.GetString(2),
+                    MsgDate = reader.GetInt64(3),
+                    Msg = reader.GetString(4),
+                    IsRead = reader.GetInt32(5) != 0
+                });
+            }
 
             return messages;
         }

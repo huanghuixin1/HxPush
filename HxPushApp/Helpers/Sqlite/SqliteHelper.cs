@@ -100,14 +100,32 @@ namespace HxPushApp.Helpers.Sqlite
         /// <summary>
         /// 保存一条推送消息。若 ID 已存在，则覆盖旧记录。
         /// </summary>
-        public async Task SaveMessageAsync(HxPushMsgModel message)
+        public Task SaveMessageAsync(HxPushMsgModel message)
         {
+            return SaveMessagesAsync(new[] { message });
+        }
+
+        /// <summary>
+        /// 批量保存连接后补发的未读消息，并只在整批完成后清理超量记录。
+        /// </summary>
+        public async Task SaveMessagesAsync(IReadOnlyCollection<HxPushMsgModel> messages)
+        {
+            if (messages.Count == 0)
+            {
+                return;
+            }
+
             await InitializeAsync();
 
             await saveLock.WaitAsync();
             try
             {
-                await database.InsertOrReplaceAsync(message);
+                // 相同 ID 使用覆盖写入，使服务端重试补发保持幂等。
+                foreach (var message in messages)
+                {
+                    await database.InsertOrReplaceAsync(message);
+                }
+
                 await DeleteOverflowMessagesAsync();
             }
             finally

@@ -14,6 +14,7 @@ namespace HxPushServerWeb
         private readonly HxPushAppKeyManager appKeyManager;
         private readonly HxPushMessageRepository messageRepository;
         private readonly ConcurrentDictionary<Guid, WebSocketClient> clients = new();
+        private readonly ConcurrentDictionary<string, SemaphoreSlim> unreadDeliveryLocks = new(StringComparer.Ordinal);
 
         // 收发消息共用序列化配置，兼容属性名大小写并保留中文。
         private static readonly JsonSerializerOptions JsonOptions = new()
@@ -60,6 +61,8 @@ namespace HxPushServerWeb
 
             try
             {
+                // 新连接先补发 AppKey 下的离线未读列表，再进入实时接收循环。
+                await SendUnreadMessagesAsync(client, context.RequestAborted);
                 await ReceiveLoopAsync(client, context.RequestAborted);
             }
             finally
@@ -92,8 +95,15 @@ namespace HxPushServerWeb
 
                 try
                 {
-                    await SendTextAsync(client, json, cancellationToken);
-                    sentCount++;
+                    if (await SendTextAsync(client, json, cancellationToken))
+                    {
+                        sentCount++;
+                    }
+                    else
+                    {
+                        // 等待发送锁期间连接可能关闭，此时不能计入成功数。
+                        clients.TryRemove(client.Id, out _);
+                    }
                 }
                 catch (WebSocketException)
                 {
@@ -103,6 +113,54 @@ namespace HxPushServerWeb
             }
 
             return sentCount;
+        }
+
+        // 将全部未读消息作为一个 JSON 数组发给新连接，成功后才批量标记已读。
+        private async Task SendUnreadMessagesAsync(
+            WebSocketClient client,
+            CancellationToken cancellationToken)
+        {
+            // 同一 AppKey 的并发连接串行领取未读列表，避免重复补发同一批消息。
+            var deliveryLock = unreadDeliveryLocks.GetOrAdd(
+                client.AppKey,
+                _ => new SemaphoreSlim(1, 1));
+            await deliveryLock.WaitAsync(cancellationToken);
+
+            try
+            {
+                var unreadMessages = await messageRepository.GetUnreadAsync(
+                    client.AppKey,
+                    hwid: null,
+                    cancellationToken);
+                if (unreadMessages.Count == 0)
+                {
+                    return;
+                }
+
+                // 当前发送即完成投递，客户端收到的模型与随后写入的数据库状态保持一致。
+                foreach (var message in unreadMessages)
+                {
+                    message.IsRead = true;
+                }
+
+                var json = JsonSerializer.Serialize(unreadMessages, JsonOptions);
+                if (!await SendTextAsync(client, json, cancellationToken))
+                {
+                    // 未真正写入 WebSocket 时保留未读，供下次连接继续补发。
+                    return;
+                }
+
+                await messageRepository.MarkAsReadAsync(
+                    unreadMessages.Select(message => message.ID).ToArray(),
+                    cancellationToken);
+
+                Console.WriteLine(
+                    $"WebSocket 未读消息补发：client={client.Id}, appKey={client.AppKey}, count={unreadMessages.Count}");
+            }
+            finally
+            {
+                deliveryLock.Release();
+            }
         }
 
         // 持续接收客户端消息，直到连接关闭或数据不合法。
@@ -201,7 +259,10 @@ namespace HxPushServerWeb
         }
 
         // 串行发送一条完整文本消息。
-        private static async Task SendTextAsync(WebSocketClient client, string text, CancellationToken cancellationToken)
+        private static async Task<bool> SendTextAsync(
+            WebSocketClient client,
+            string text,
+            CancellationToken cancellationToken)
         {
             var bytes = Encoding.UTF8.GetBytes(text);
 
@@ -216,7 +277,10 @@ namespace HxPushServerWeb
                         WebSocketMessageType.Text,
                         WebSocketMessageFlags.EndOfMessage,
                         cancellationToken);
+                    return true;
                 }
+
+                return false;
             }
             finally
             {

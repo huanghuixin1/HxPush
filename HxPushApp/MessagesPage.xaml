@@ -75,7 +75,7 @@
                             FontSize="18"
                             HorizontalTextAlignment="Center" />
                         <Label
-                            Text="下拉刷新本地消息"
+                            Text="下拉可从服务端同步消息"
                             FontSize="14"
                             TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}"
                             HorizontalTextAlignment="Center" />
@@ -139,10 +139,17 @@
                     <Grid
                         HeightRequest="44"
                         IsVisible="{Binding IsLoadingMore}">
-                        <ActivityIndicator
-                            IsRunning="{Binding IsLoadingMore}"
+                        <HorizontalStackLayout
+                            Spacing="8"
                             HorizontalOptions="Center"
-                            VerticalOptions="Center" />
+                            VerticalOptions="Center">
+                            <ActivityIndicator IsRunning="{Binding IsLoadingMore}" />
+                            <Label
+                                Text="正在加载更多..."
+                                FontSize="13"
+                                VerticalOptions="Center"
+                                TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}" />
+                        </HorizontalStackLayout>
                     </Grid>
                 </CollectionView.Footer>
             </CollectionView>
@@ -167,6 +174,31 @@
                 Text="没有新的数据"
                 FontSize="14"
                 TextColor="White" />
+        </Border>
+
+        <Border
+            Grid.RowSpan="3"
+            Padding="18,14"
+            IsVisible="{Binding IsServerRequesting}"
+            HorizontalOptions="Center"
+            VerticalOptions="Center"
+            StrokeThickness="0"
+            BackgroundColor="#DD222222">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="14" />
+            </Border.StrokeShape>
+
+            <HorizontalStackLayout Spacing="12">
+                <ActivityIndicator
+                    IsRunning="{Binding IsServerRequesting}"
+                    Color="White"
+                    VerticalOptions="Center" />
+                <Label
+                    Text="{Binding LoadingText}"
+                    FontSize="14"
+                    TextColor="White"
+                    VerticalOptions="Center" />
+            </HorizontalStackLayout>
         </Border>
     </Grid>
 </ContentPage>

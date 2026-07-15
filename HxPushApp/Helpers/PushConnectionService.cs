@@ -91,15 +91,15 @@ namespace HxPushApp.Helpers
         {
             RaiseLogMessage($"接收：{message}");
 
-            if (!TryParsePushMessage(message, out var pushMessage))
+            if (!TryParsePushMessages(message, out var pushMessages))
             {
                 return;
             }
 
             try
             {
-                await sqliteHelper.SaveMessageAsync(pushMessage);
-                RaiseLogMessage($"已保存消息：{pushMessage.ID}");
+                await sqliteHelper.SaveMessagesAsync(pushMessages);
+                RaiseLogMessage($"已保存消息：{pushMessages.Count} 条");
             }
             catch (Exception ex)
             {
@@ -107,36 +107,57 @@ namespace HxPushApp.Helpers
             }
         }
 
-        private static bool TryParsePushMessage(
+        // 同时兼容实时单条对象和连接后补发的消息数组。
+        private static bool TryParsePushMessages(
             string message,
-            out HxPushMsgModel pushMessage)
+            out IReadOnlyList<HxPushMsgModel> pushMessages)
         {
-            pushMessage = new HxPushMsgModel();
+            pushMessages = Array.Empty<HxPushMsgModel>();
 
-            if (string.IsNullOrWhiteSpace(message) || !message.TrimStart().StartsWith('{'))
+            if (string.IsNullOrWhiteSpace(message))
             {
                 return false;
             }
 
             try
             {
-                var parsedMessage = JsonSerializer.Deserialize<HxPushMsgModel>(message, JsonOptions);
-                if (parsedMessage is null ||
-                    string.IsNullOrWhiteSpace(parsedMessage.AppKey) ||
-                    string.IsNullOrWhiteSpace(parsedMessage.Hwid) ||
-                    string.IsNullOrWhiteSpace(parsedMessage.Msg) ||
-                    parsedMessage.MsgDate <= 0)
+                var trimmedMessage = message.TrimStart();
+                HxPushMsgModel[] parsedMessages;
+
+                if (trimmedMessage.StartsWith('['))
+                {
+                    parsedMessages = JsonSerializer.Deserialize<HxPushMsgModel[]>(message, JsonOptions)
+                        ?? Array.Empty<HxPushMsgModel>();
+                }
+                else if (trimmedMessage.StartsWith('{'))
+                {
+                    var parsedMessage = JsonSerializer.Deserialize<HxPushMsgModel>(message, JsonOptions);
+                    parsedMessages = parsedMessage is null ? Array.Empty<HxPushMsgModel>() : new[] { parsedMessage };
+                }
+                else
                 {
                     return false;
                 }
 
-                if (string.IsNullOrWhiteSpace(parsedMessage.ID))
+                // 整批验证核心字段，避免保存不完整的服务端载荷。
+                foreach (var parsedMessage in parsedMessages)
                 {
-                    parsedMessage.ID = Guid.NewGuid().ToString("N");
+                    if (string.IsNullOrWhiteSpace(parsedMessage.AppKey) ||
+                        string.IsNullOrWhiteSpace(parsedMessage.Hwid) ||
+                        string.IsNullOrWhiteSpace(parsedMessage.Msg) ||
+                        parsedMessage.MsgDate <= 0)
+                    {
+                        return false;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(parsedMessage.ID))
+                    {
+                        parsedMessage.ID = Guid.NewGuid().ToString("N");
+                    }
                 }
 
-                pushMessage = parsedMessage;
-                return true;
+                pushMessages = parsedMessages;
+                return parsedMessages.Length > 0;
             }
             catch (JsonException)
             {

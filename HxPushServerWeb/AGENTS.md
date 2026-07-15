@@ -49,3 +49,5 @@
 - 2026-07-15: 修复连续保存消息时间相同：`MsgDate` 升级为 Unix 毫秒 `long`，`InsertAsync` 基于数据库最大值和当前时间生成严格递增的服务端保存时间，并同步写入 `CreatedAtUtc`；旧秒级数据启动时自动乘以 1000，测试页面和 HxPushApp 同步升级。
 - 2026-07-15: 消息时间字段统一为服务端 `MsgDate`：新表和 INSERT 删除重复的 `CreatedAtUtc`，旧库先回填 `MsgDate` 再删除旧列；HTTP 和 WebSocket 均无条件忽略客户端时间并生成严格递增毫秒值，网页及 HxPushApp 发送时不再赋时间。
 - 2026-07-15: 消息分页接口和未读接口增加可选 `hwid` 精确筛选；留空仍查询 AppKey 下全部设备，填写后只返回并标记对应设备的消息，SQLite 同步增加 AppKey/Hwid/IsRead/MsgDate 组合索引，`webapi.html` 增加测试输入。
+- 2026-07-15: WebSocket 完成 AppKey 握手后会读取该 AppKey 的全部未读消息，并以 `HxPushMsgModel[]` JSON 数组一次性补发给新连接；只有发送成功才批量标记已读，同 AppKey 并发连接串行领取未读列表以减少重复补发。
+- 2026-07-15：`GET /api/messages` 新增 `beforemsgdate` 和 `beforeid` 游标参数，按 `MsgDate DESC, ID DESC` 获取指定消息之前的更旧数据；`pagesize` 服务端限制为最多 50 条，原 `pageindex/pagesize` 调用方式继续兼容，`wwwroot/webapi.html` 同步增加游标测试输入。

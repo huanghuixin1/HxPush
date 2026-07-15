@@ -213,6 +213,16 @@
             <input id="listPageSize" type="number" min="1" step="1" value="10">
           </div>
         </div>
+        <div class="two">
+          <div class="field">
+            <label for="listBeforeMsgDate">beforemsgdate（可选）</label>
+            <input id="listBeforeMsgDate" type="number" min="1" step="1" placeholder="上一页最后一条 MsgDate">
+          </div>
+          <div class="field">
+            <label for="listBeforeId">beforeid（可选）</label>
+            <input id="listBeforeId" placeholder="上一页最后一条 ID" autocomplete="off">
+          </div>
+        </div>
         <div class="actions">
           <button id="getMessagesButton" type="button">获取本页消息</button>
           <button id="getUnreadButton" class="secondary" type="button">获取全部未读</button>
@@ -275,6 +285,8 @@
     const listHwidInput = document.querySelector("#listHwid");
     const listPageIndexInput = document.querySelector("#listPageIndex");
     const listPageSizeInput = document.querySelector("#listPageSize");
+    const listBeforeMsgDateInput = document.querySelector("#listBeforeMsgDate");
+    const listBeforeIdInput = document.querySelector("#listBeforeId");
     const getMessagesButton = document.querySelector("#getMessagesButton");
     const getUnreadButton = document.querySelector("#getUnreadButton");
     const apiPathSelect = document.querySelector("#apiPath");
@@ -358,6 +370,7 @@
         pagesize: listPageSizeInput.value
       });
       appendOptionalHwid(query);
+      appendOptionalMessageCursor(query);
 
       await executeRequest(`${baseUrl}/api/messages?${query}`, { method: "GET" });
     }
@@ -382,6 +395,16 @@
       const hwid = listHwidInput.value.trim();
       if (hwid) {
         query.set("hwid", hwid);
+      }
+    }
+
+    // 填写游标后，服务端按 MsgDate DESC, ID DESC 返回该消息之前的更旧数据。
+    function appendOptionalMessageCursor(query) {
+      const beforeMsgDate = listBeforeMsgDateInput.value.trim();
+      const beforeId = listBeforeIdInput.value.trim();
+      if (beforeMsgDate || beforeId) {
+        query.set("beforemsgdate", beforeMsgDate);
+        query.set("beforeid", beforeId);
       }
     }
 

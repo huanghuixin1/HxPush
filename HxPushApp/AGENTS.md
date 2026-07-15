@@ -57,3 +57,8 @@
 - 2026-07-15：消息列表在设备信息行右侧显示消息本地时分秒，消息详情增加独立时间字段；两处统一通过 Unix 时间转换器将 `MsgDate` 格式化为 `HH:mm:ss`，无效时间显示占位符。
 - 2026-07-15：消息列表和详情的时间格式补充年月日，统一调整为本地时间 `yyyy-MM-dd HH:mm:ss`。
 - 2026-07-15：消息列表移除消息 ID，毫秒级 `MsgDate` 仍用于精确排序但显示格式去掉毫秒；新增设备 ID 下拉筛选，设备列表来自 SQLite 去重查询，首批加载和滚动分页都在数据库层应用相同 Hwid 条件，并增加组合索引优化筛选性能。
+- 2026-07-15：WebSocket 接收处理同时兼容实时单条 `HxPushMsgModel` 和连接后补发的 `HxPushMsgModel[]` 未读数组；补发列表批量写入本地 SQLite，相同消息 ID 覆盖保存以保证服务端重试时幂等。
+- 2026-07-15：消息页下拉刷新会先通过 `HxPushMessageApiClient` 从服务端拉取最新 50 条并写入 SQLite，再从本地库展示合并结果；向下滚动到底且本地没有更旧数据时，会按最后一条消息的 `MsgDate + ID` 游标向服务端再拉最多 50 条，WebSocket、HTTP 拉取和 SQLite 存储继续分层解耦。
+- 2026-07-15：修复 Android manifest 图标引用，将 `@mipmap/appicon` 对齐为当前 MAUI 图标资源 `@mipmap/iconhx`，恢复 Android 构建通过。
+- 2026-07-15：优化消息页服务端同步体验；`HxPushMessageApiClient` 为消息拉取增加 10 秒超时，`HttpClientHelper.GetJsonAsync` 改为先读取完整文本再反序列化，避免部分平台卡在响应流读取；消息页将远端拉取和 SQLite 写入放到后台任务，并新增同步中的 loading 遮罩与超时提示。
+- 2026-07-15：Android 已有 `INTERNET` 权限；为解决 `http://` / `ws://` 明文服务地址刷新时报 `connection failure`，新增 `Platforms/Android/Resources/xml/network_security_config.xml`，仅对白名单服务器 `192.168.31.119`、`43.142.82.217`、`push.huixingfifa.top` 放行明文流量，并在 manifest 中引用。
