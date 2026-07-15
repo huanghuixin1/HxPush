@@ -16,13 +16,18 @@ namespace HxPushApp.models.Message
         public string Hwid { get; set; } = string.Empty;
 
         /// <summary>
-        /// 消息的发送时间 时间戳 精确到秒
+        /// 消息保存或发送时间，Unix 毫秒时间戳。
         /// </summary>
-        public int MsgDate { get; set; }
+        public long MsgDate { get; set; }
 
         /// <summary>
         /// 消息主体
         /// </summary>
         public string Msg { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 消息是否已成功推送或被接口读取。
+        /// </summary>
+        public bool IsRead { get; set; }
     }
 }

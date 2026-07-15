@@ -9,6 +9,7 @@ namespace HxPushApp
         string id = string.Empty;
         string messageContent = string.Empty;
         string hwid = string.Empty;
+        long msgDate;
 
         public string MessageNo => !string.IsNullOrWhiteSpace(id) ? $"消息 #{id}" : "消息详情";
 
@@ -42,6 +43,21 @@ namespace HxPushApp
             }
         }
 
+        public long MsgDate
+        {
+            get => msgDate;
+            set
+            {
+                if (msgDate == value)
+                {
+                    return;
+                }
+
+                msgDate = value;
+                OnPropertyChanged();
+            }
+        }
+
         public MessageDetailPage()
         {
             InitializeComponent();
@@ -58,6 +74,7 @@ namespace HxPushApp
             id = message.ID;
             MessageContent = message.Msg;
             Hwid = message.Hwid;
+            MsgDate = message.MsgDate;
             OnPropertyChanged(nameof(MessageNo));
         }
 

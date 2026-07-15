@@ -11,10 +11,12 @@ namespace HxPushApp.Helpers.Sqlite
     public sealed class SqliteHelper
     {
         private const string DatabaseFileName = "hxpush.db3";
+        private const int MaxStoredMessages = 10_000;
         private static readonly Lazy<SqliteHelper> LazyInstance = new(() => new SqliteHelper());
 
         private readonly SQLiteAsyncConnection database;
         private readonly SemaphoreSlim initializeLock = new(1, 1);
+        private readonly SemaphoreSlim saveLock = new(1, 1);
         private bool isInitialized;
 
         private SqliteHelper()
@@ -55,15 +57,37 @@ namespace HxPushApp.Helpers.Sqlite
                         AppKey TEXT NOT NULL,
                         Hwid TEXT NOT NULL,
                         MsgDate INTEGER NOT NULL,
-                        Msg TEXT NOT NULL
+                        Msg TEXT NOT NULL,
+                        IsRead INTEGER NOT NULL DEFAULT 0
                     );
                     """);
+
+                // 兼容已有安装：共享模型增加 IsRead 后补齐本地表字段。
+                var columns = await database.GetTableInfoAsync("HxPushMsgModel");
+                if (!columns.Any(column =>
+                        string.Equals(column.Name, nameof(HxPushMsgModel.IsRead), StringComparison.OrdinalIgnoreCase)))
+                {
+                    await database.ExecuteAsync(
+                        "ALTER TABLE HxPushMsgModel ADD COLUMN IsRead INTEGER NOT NULL DEFAULT 0;");
+                }
+
+                // 旧版 MsgDate 使用秒级时间戳，安全升级为毫秒后再参与排序。
+                await database.ExecuteAsync(
+                    "UPDATE HxPushMsgModel SET MsgDate = MsgDate * 1000 WHERE MsgDate > 0 AND MsgDate < 100000000000;");
 
                 await database.ExecuteAsync(
                     """
                     CREATE INDEX IF NOT EXISTS IX_HxPushMsgModel_MsgDate_ID
                     ON HxPushMsgModel (MsgDate DESC, ID DESC);
                     """);
+
+                await database.ExecuteAsync(
+                    """
+                    CREATE INDEX IF NOT EXISTS IX_HxPushMsgModel_Hwid_MsgDate_ID
+                    ON HxPushMsgModel (Hwid, MsgDate DESC, ID DESC);
+                    """);
+
+                await DeleteOverflowMessagesAsync();
 
                 isInitialized = true;
             }
@@ -79,19 +103,63 @@ namespace HxPushApp.Helpers.Sqlite
         public async Task SaveMessageAsync(HxPushMsgModel message)
         {
             await InitializeAsync();
-            await database.InsertOrReplaceAsync(message);
+
+            await saveLock.WaitAsync();
+            try
+            {
+                await database.InsertOrReplaceAsync(message);
+                await DeleteOverflowMessagesAsync();
+            }
+            finally
+            {
+                saveLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// 仅保留按时间排序后的最新 10000 条消息。
+        /// </summary>
+        private Task<int> DeleteOverflowMessagesAsync()
+        {
+            return database.ExecuteAsync(
+                """
+                DELETE FROM HxPushMsgModel
+                WHERE rowid IN (
+                    SELECT rowid
+                    FROM HxPushMsgModel
+                    ORDER BY MsgDate DESC, ID DESC
+                    LIMIT -1 OFFSET ?
+                );
+                """,
+                MaxStoredMessages);
         }
 
         /// <summary>
         /// 获取最近的消息，默认最多返回 50 条。
         /// </summary>
-        public async Task<IReadOnlyList<HxPushMsgModel>> GetRecentMessagesAsync(int limit = 50)
+        public async Task<IReadOnlyList<HxPushMsgModel>> GetRecentMessagesAsync(
+            int limit = 50,
+            string? hwid = null)
         {
             await InitializeAsync();
 
+            if (!string.IsNullOrWhiteSpace(hwid))
+            {
+                return await database.QueryAsync<HxPushMsgModel>(
+                    """
+                    SELECT ID, AppKey, Hwid, MsgDate, Msg, IsRead
+                    FROM HxPushMsgModel
+                    WHERE Hwid = ?
+                    ORDER BY MsgDate DESC, ID DESC
+                    LIMIT ?
+                    """,
+                    hwid,
+                    limit);
+            }
+
             return await database.QueryAsync<HxPushMsgModel>(
                 """
-                SELECT ID, AppKey, Hwid, MsgDate, Msg
+                SELECT ID, AppKey, Hwid, MsgDate, Msg, IsRead
                 FROM HxPushMsgModel
                 ORDER BY MsgDate DESC, ID DESC
                 LIMIT ?
@@ -104,15 +172,34 @@ namespace HxPushApp.Helpers.Sqlite
         /// 发送时间相同时使用 ID 作为游标，避免重复或遗漏消息。
         /// </summary>
         public async Task<IReadOnlyList<HxPushMsgModel>> GetMessagesBeforeAsync(
-            int msgDate,
+            long msgDate,
             string id,
-            int limit = 50)
+            int limit = 50,
+            string? hwid = null)
         {
             await InitializeAsync();
 
+            if (!string.IsNullOrWhiteSpace(hwid))
+            {
+                return await database.QueryAsync<HxPushMsgModel>(
+                    """
+                    SELECT ID, AppKey, Hwid, MsgDate, Msg, IsRead
+                    FROM HxPushMsgModel
+                    WHERE Hwid = ?
+                      AND (MsgDate < ? OR (MsgDate = ? AND ID < ?))
+                    ORDER BY MsgDate DESC, ID DESC
+                    LIMIT ?
+                    """,
+                    hwid,
+                    msgDate,
+                    msgDate,
+                    id,
+                    limit);
+            }
+
             return await database.QueryAsync<HxPushMsgModel>(
                 """
-                SELECT ID, AppKey, Hwid, MsgDate, Msg
+                SELECT ID, AppKey, Hwid, MsgDate, Msg, IsRead
                 FROM HxPushMsgModel
                 WHERE MsgDate < ? OR (MsgDate = ? AND ID < ?)
                 ORDER BY MsgDate DESC, ID DESC
@@ -125,6 +212,24 @@ namespace HxPushApp.Helpers.Sqlite
         }
 
         /// <summary>
+        /// 获取本地消息中全部非空设备 ID，供消息列表筛选使用。
+        /// </summary>
+        public async Task<IReadOnlyList<string>> GetDeviceIdsAsync()
+        {
+            await InitializeAsync();
+
+            var rows = await database.QueryAsync<DeviceIdRow>(
+                """
+                SELECT DISTINCT Hwid
+                FROM HxPushMsgModel
+                WHERE Hwid <> ''
+                ORDER BY Hwid COLLATE NOCASE;
+                """);
+
+            return rows.Select(row => row.Hwid).ToList();
+        }
+
+        /// <summary>
         /// 根据消息 ID 删除本地消息。
         /// </summary>
         public async Task<int> DeleteMessageAsync(string id)
@@ -134,6 +239,11 @@ namespace HxPushApp.Helpers.Sqlite
             return await database.ExecuteAsync(
                 "DELETE FROM HxPushMsgModel WHERE ID = ?",
                 id);
+        }
+
+        private sealed class DeviceIdRow
+        {
+            public string Hwid { get; set; } = string.Empty;
         }
     }
 }

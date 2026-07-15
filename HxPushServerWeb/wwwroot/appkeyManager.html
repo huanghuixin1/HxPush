@@ -24,23 +24,36 @@
     }
 
     main {
-      width: min(760px, calc(100vw - 32px));
+      width: min(920px, calc(100vw - 32px));
       margin: 0 auto;
       padding: 32px 0;
     }
 
-    header {
+    header,
+    .editor-heading,
+    .actions {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      gap: 12px;
+    }
+
+    header {
       margin-bottom: 18px;
     }
 
-    h1 {
+    h1,
+    h2 {
       margin: 0;
-      font-size: 24px;
       line-height: 1.25;
+    }
+
+    h1 {
+      font-size: 24px;
+    }
+
+    h2 {
+      font-size: 16px;
     }
 
     .state {
@@ -76,46 +89,37 @@
     }
 
     input,
-    textarea,
     button {
       font: inherit;
     }
 
-    input,
-    textarea {
+    input {
       width: 100%;
+      min-width: 0;
       border: 1px solid #bfc8d4;
       border-radius: 6px;
-      padding: 10px 12px;
+      padding: 9px 11px;
       background: #fff;
       color: #1d2939;
       outline: none;
     }
 
-    input:focus,
-    textarea:focus {
+    input:focus {
       border-color: #16794a;
       box-shadow: 0 0 0 3px rgba(22, 121, 74, 0.14);
     }
 
-    textarea {
-      min-height: 360px;
-      resize: vertical;
-      font-family: Consolas, "Cascadia Mono", monospace;
-      line-height: 1.55;
-    }
-
-    textarea:disabled {
+    input:disabled {
       background: #f2f4f7;
       color: #98a2b3;
       cursor: not-allowed;
     }
 
     button {
-      min-height: 42px;
+      min-height: 40px;
       border: 0;
       border-radius: 6px;
-      padding: 9px 16px;
+      padding: 8px 14px;
       background: #16794a;
       color: #fff;
       cursor: pointer;
@@ -127,6 +131,23 @@
       background: #344054;
     }
 
+    button.tertiary {
+      border: 1px solid #98a2b3;
+      background: #fff;
+      color: #344054;
+    }
+
+    button.icon-button {
+      width: 38px;
+      min-height: 38px;
+      padding: 0;
+      background: #fff;
+      color: #b42318;
+      border: 1px solid #e4b5b0;
+      font-size: 22px;
+      line-height: 1;
+    }
+
     button:disabled {
       cursor: not-allowed;
       opacity: 0.48;
@@ -134,7 +155,7 @@
 
     .auth-row {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) auto auto;
       gap: 10px;
       align-items: end;
     }
@@ -145,22 +166,59 @@
       border-top: 1px solid #e4e7ec;
     }
 
-    .editor-heading {
+    .editor-tools {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
     }
 
     .count {
+      margin-top: 4px;
       color: #667085;
       font-size: 13px;
     }
 
+    .key-list {
+      margin-top: 14px;
+      border: 1px solid #d7dde5;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .key-row {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) 38px;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border-top: 1px solid #e4e7ec;
+      background: #fff;
+    }
+
+    .key-row:first-child {
+      border-top: 0;
+    }
+
+    .key-row.header-row {
+      min-height: 38px;
+      padding-top: 8px;
+      padding-bottom: 8px;
+      background: #f8fafc;
+      color: #475467;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .empty-state {
+      padding: 34px 16px;
+      color: #667085;
+      text-align: center;
+    }
+
     .actions {
-      display: flex;
       justify-content: flex-end;
-      margin-top: 12px;
+      margin-top: 14px;
     }
 
     .status {
@@ -178,24 +236,46 @@
       color: #b42318;
     }
 
-    @media (max-width: 560px) {
+    @media (max-width: 680px) {
       main {
-        width: min(100% - 24px, 760px);
+        width: min(100% - 24px, 920px);
         padding: 20px 0;
       }
 
-      header,
       .auth-row {
-        align-items: stretch;
         grid-template-columns: 1fr;
-      }
-
-      header {
-        display: flex;
       }
 
       .auth-row button {
         width: 100%;
+      }
+
+      .editor-heading {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .editor-tools {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .key-row {
+        grid-template-columns: minmax(0, 1fr) 38px;
+      }
+
+      .key-row .remark-input {
+        grid-column: 1 / -1;
+        grid-row: 2;
+      }
+
+      .key-row .icon-button {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .header-row {
+        display: none;
       }
     }
   </style>
@@ -207,25 +287,41 @@
       <span id="lockState" class="state">未验证</span>
     </header>
 
-    <!-- 页面只提供密码验证、AppKey 读取和覆盖保存。 -->
+    <!-- 页面只提供密码验证、AppKey 读取和编辑。 -->
     <section class="panel">
       <form id="managerForm">
         <div class="auth-row">
           <div>
             <label for="password">管理密码</label>
-            <input id="password" type="password" autocomplete="off" required>
+            <input id="password" type="password" autocomplete="current-password" required>
           </div>
           <button id="loadButton" class="secondary" type="submit">读取 AppKey</button>
+          <button id="clearPasswordButton" class="tertiary" type="button">清除记忆</button>
         </div>
 
         <div class="editor">
           <div class="editor-heading">
-            <label for="appKeys">AppKey（每行一个）</label>
-            <span id="appKeyCount" class="count">0 条</span>
+            <div>
+              <h2>AppKey 列表</h2>
+              <div id="appKeyCount" class="count">0 条</div>
+            </div>
+            <div class="editor-tools">
+              <button id="addButton" class="tertiary" type="button" disabled>新增</button>
+              <button id="generateButton" type="button" disabled>生成并添加</button>
+            </div>
           </div>
-          <textarea id="appKeys" spellcheck="false" disabled></textarea>
+
+          <div class="key-list">
+            <div class="key-row header-row" aria-hidden="true">
+              <span>AppKey</span>
+              <span>备注</span>
+              <span></span>
+            </div>
+            <div id="keyRows"></div>
+          </div>
+
           <div class="actions">
-            <button id="saveButton" type="button" disabled>保存 AppKey</button>
+            <button id="saveButton" type="button" disabled>保存全部</button>
           </div>
         </div>
 
@@ -237,27 +333,35 @@
   <script>
     const passwordHeader = "X-AppKey-Manager-Password";
     const apiUrl = "/api/appkeys";
+    const passwordStorageKey = "hxpush.appkey-manager.password";
 
-    // 缓存页面元素并记录本次验证通过的密码。
+    // 缓存页面元素并记录本次验证状态和列表数据。
     const managerForm = document.querySelector("#managerForm");
     const passwordInput = document.querySelector("#password");
     const loadButton = document.querySelector("#loadButton");
-    const appKeysInput = document.querySelector("#appKeys");
+    const clearPasswordButton = document.querySelector("#clearPasswordButton");
+    const addButton = document.querySelector("#addButton");
+    const generateButton = document.querySelector("#generateButton");
     const saveButton = document.querySelector("#saveButton");
+    const keyRows = document.querySelector("#keyRows");
     const appKeyCount = document.querySelector("#appKeyCount");
     const lockState = document.querySelector("#lockState");
     const statusBox = document.querySelector("#status");
 
     let verifiedPassword = "";
+    let hasRememberedPassword = false;
     let isBusy = false;
+    let entries = [];
 
     managerForm.addEventListener("submit", (event) => {
       event.preventDefault();
       loadAppKeys();
     });
 
-    saveButton.addEventListener("click", saveAppKeys);
-    appKeysInput.addEventListener("input", updateCount);
+    addButton.addEventListener("click", addEmptyEntry);
+    generateButton.addEventListener("click", generateAndAddAppKey);
+    saveButton.addEventListener("click", () => persistEntries("AppKey 已保存并立即生效。"));
+    clearPasswordButton.addEventListener("click", clearRememberedPassword);
 
     // 密码变化后立即清空数据并重新锁定，避免未验证状态继续读取或编辑。
     passwordInput.addEventListener("input", () => {
@@ -266,7 +370,10 @@
       }
     });
 
-    // 验证密码并从服务端读取完整 AppKey 列表。
+    restoreRememberedPassword();
+    renderRows();
+
+    // 验证密码并从服务端读取带备注的 AppKey 列表。
     async function loadAppKeys() {
       const password = passwordInput.value;
       if (!password) {
@@ -285,13 +392,18 @@
         const result = await readResult(response);
 
         if (!response.ok || result.code !== 0 || !Array.isArray(result.msg)) {
+          if (response.status === 403) {
+            removeRememberedPassword();
+          }
+
           throw new Error(getResultMessage(result, "读取失败。"));
         }
 
+        rememberPassword(password);
         verifiedPassword = password;
-        appKeysInput.value = result.msg.join("\n");
+        entries = result.msg.map(normalizeApiEntry).filter(entry => entry.AppKey);
         unlockEditor();
-        updateCount();
+        renderRows();
         showStatus("AppKey 已读取。", "success");
       } catch (error) {
         lockEditor();
@@ -301,15 +413,35 @@
       }
     }
 
-    // 覆盖保存去空行、去重后的 AppKey 列表。
-    async function saveAppKeys() {
+    // 新增空白行，默认备注使用当天日期。
+    function addEmptyEntry() {
+      entries.push({ AppKey: "", Remark: getToday() });
+      renderRows();
+      keyRows.querySelector(".key-row:last-child .key-input")?.focus();
+    }
+
+    // 使用安全随机数生成 Key，保存成功后才保留新增记录。
+    async function generateAndAddAppKey() {
+      const generatedEntry = { AppKey: generateAppKey(), Remark: getToday() };
+      entries.push(generatedEntry);
+      renderRows();
+
+      const saved = await persistEntries("新 AppKey 已生成并立即生效。");
+      if (!saved) {
+        entries = entries.filter(entry => entry !== generatedEntry);
+        renderRows();
+      }
+    }
+
+    // 覆盖保存当前表格，服务端会同步更新文件和内存缓存。
+    async function persistEntries(successMessage) {
       if (!verifiedPassword || passwordInput.value !== verifiedPassword) {
         lockEditor();
         showStatus("请重新验证管理密码。", "error");
-        return;
+        return false;
       }
 
-      const appKeys = normalizeAppKeys(appKeysInput.value);
+      const payload = normalizeEntries(entries);
       setBusy(true);
 
       try {
@@ -319,7 +451,7 @@
             "Content-Type": "application/json",
             [passwordHeader]: verifiedPassword
           },
-          body: JSON.stringify(appKeys),
+          body: JSON.stringify(payload),
           cache: "no-store"
         });
         const result = await readResult(response);
@@ -328,24 +460,113 @@
           throw new Error(getResultMessage(result, "保存失败。"));
         }
 
-        appKeysInput.value = appKeys.join("\n");
-        updateCount();
-        showStatus("AppKey 已保存并立即生效。", "success");
+        entries = payload;
+        renderRows();
+        showStatus(successMessage, "success");
+        return true;
       } catch (error) {
         showStatus(error.message, "error");
+        return false;
       } finally {
         setBusy(false);
       }
     }
 
-    // 每行解析一个 AppKey，并在提交前去除重复项。
-    function normalizeAppKeys(value) {
-      return [...new Set(
-        value.split(/\r?\n/)
-          .map(item => item.trim())
-          .filter(Boolean)
-      )].sort((left, right) => left.localeCompare(right));
+    // 动态创建输入控件，使用 textContent/value 避免把数据当作 HTML。
+    function renderRows() {
+      keyRows.replaceChildren();
+
+      if (entries.length === 0) {
+        const emptyState = document.createElement("div");
+        emptyState.className = "empty-state";
+        emptyState.textContent = verifiedPassword ? "暂无 AppKey" : "验证密码后读取 AppKey";
+        keyRows.append(emptyState);
+      }
+
+      entries.forEach((entry, index) => {
+        const row = document.createElement("div");
+        row.className = "key-row";
+
+        const keyInput = document.createElement("input");
+        keyInput.className = "key-input";
+        keyInput.value = entry.AppKey;
+        keyInput.placeholder = "AppKey";
+        keyInput.setAttribute("aria-label", `第 ${index + 1} 行 AppKey`);
+        keyInput.addEventListener("input", () => entry.AppKey = keyInput.value);
+
+        const remarkInput = document.createElement("input");
+        remarkInput.className = "remark-input";
+        remarkInput.value = entry.Remark;
+        remarkInput.placeholder = "备注";
+        remarkInput.setAttribute("aria-label", `第 ${index + 1} 行备注`);
+        remarkInput.addEventListener("input", () => entry.Remark = remarkInput.value);
+
+        const deleteButton = document.createElement("button");
+        deleteButton.className = "icon-button";
+        deleteButton.type = "button";
+        deleteButton.title = "删除";
+        deleteButton.setAttribute("aria-label", `删除第 ${index + 1} 行`);
+        deleteButton.textContent = "×";
+        deleteButton.addEventListener("click", () => {
+          entries.splice(index, 1);
+          renderRows();
+        });
+
+        row.append(keyInput, remarkInput, deleteButton);
+        keyRows.append(row);
+      });
+
+      appKeyCount.textContent = `${entries.filter(entry => entry.AppKey.trim()).length} 条`;
+      updateControls();
     }
+
+    // 兼容服务端 PascalCase、camelCase 和旧版字符串响应。
+    function normalizeApiEntry(value) {
+      if (typeof value === "string") {
+        return { AppKey: value.trim(), Remark: getToday() };
+      }
+
+      return {
+        AppKey: String(value?.AppKey ?? value?.appKey ?? "").trim(),
+        Remark: String(value?.Remark ?? value?.remark ?? "").trim() || getToday()
+      };
+    }
+
+    // 提交前去空值、补默认备注、按 Key 去重并排序。
+    function normalizeEntries(values) {
+      const uniqueEntries = new Map();
+
+      values.forEach(value => {
+        const appKey = value.AppKey.trim();
+        if (appKey) {
+          uniqueEntries.set(appKey, {
+            AppKey: appKey,
+            Remark: value.Remark.trim() || getToday()
+          });
+        }
+      });
+
+      return [...uniqueEntries.values()]
+        .sort((left, right) => left.AppKey.localeCompare(right.AppKey));
+    }
+
+    // 生成 128 位随机 Key，并确保不与当前列表重复。
+    function generateAppKey() {
+      let appKey;
+      do {
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        appKey = [...bytes].map(value => value.toString(16).padStart(2, "0")).join("");
+      } while (entries.some(entry => entry.AppKey === appKey));
+
+      return appKey;
+    }
+
+      function getToday() {
+          const now = new Date();
+          const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+          return localDate.toISOString().slice(0, 19).replace('T', ' ');
+      }
+
 
     // 解析统一响应，非 JSON 内容也转成可读错误。
     async function readResult(response) {
@@ -361,38 +582,77 @@
       return typeof result?.msg === "string" ? result.msg : fallback;
     }
 
+    // 仅在服务端验证成功后保存密码，供下次打开页面自动填充。
+    function rememberPassword(password) {
+      try {
+        localStorage.setItem(passwordStorageKey, password);
+        hasRememberedPassword = true;
+      } catch {
+        hasRememberedPassword = false;
+      }
+    }
+
+    function restoreRememberedPassword() {
+      try {
+        const password = localStorage.getItem(passwordStorageKey) || "";
+        passwordInput.value = password;
+        hasRememberedPassword = Boolean(password);
+      } catch {
+        hasRememberedPassword = false;
+      }
+    }
+
+    function removeRememberedPassword() {
+      try {
+        localStorage.removeItem(passwordStorageKey);
+      } catch {
+        // 隐私模式禁用存储时，仍保持页面其它功能可用。
+      }
+
+      hasRememberedPassword = false;
+    }
+
+    // 主动清除浏览器存储和当前输入，并重新锁定列表。
+    function clearRememberedPassword() {
+      removeRememberedPassword();
+      passwordInput.value = "";
+      lockEditor();
+      showStatus("已清除浏览器中保存的管理密码。", "success");
+    }
+
     // 锁定时清空已读取内容，确保列表只能在当前密码验证通过后显示。
     function lockEditor() {
       verifiedPassword = "";
-      appKeysInput.value = "";
-      appKeysInput.disabled = true;
-      saveButton.disabled = true;
+      entries = [];
       lockState.textContent = "未验证";
       lockState.className = "state";
-      updateCount();
+      renderRows();
     }
 
     function unlockEditor() {
-      appKeysInput.disabled = isBusy;
-      saveButton.disabled = isBusy;
       lockState.textContent = "已验证";
       lockState.className = "state unlocked";
+      updateControls();
     }
 
     // 请求期间禁用控件，避免并发读取或重复保存。
     function setBusy(value) {
       isBusy = value;
-      passwordInput.disabled = value;
-      loadButton.disabled = value;
-
-      if (verifiedPassword) {
-        appKeysInput.disabled = value;
-        saveButton.disabled = value;
-      }
+      updateControls();
     }
 
-    function updateCount() {
-      appKeyCount.textContent = `${normalizeAppKeys(appKeysInput.value).length} 条`;
+    function updateControls() {
+      const isUnlocked = Boolean(verifiedPassword);
+      passwordInput.disabled = isBusy;
+      loadButton.disabled = isBusy;
+      clearPasswordButton.disabled = isBusy || (!hasRememberedPassword && !passwordInput.value);
+      addButton.disabled = !isUnlocked || isBusy;
+      generateButton.disabled = !isUnlocked || isBusy;
+      saveButton.disabled = !isUnlocked || isBusy;
+
+      keyRows.querySelectorAll("input, button").forEach(control => {
+        control.disabled = !isUnlocked || isBusy;
+      });
     }
 
     function showStatus(message, state) {

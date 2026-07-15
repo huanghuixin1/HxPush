@@ -17,6 +17,9 @@
 - `MessageDetailPage.xaml` / `MessageDetailPage.xaml.cs`：消息详情页，显示完整消息内容。
 - `Helpers/Sqlite/SqliteHelper.cs`：本地消息存储与按 `MsgDate + ID` 游标分页查询。
 - `Helpers/AppSettings.cs`：基于 MAUI `Preferences` 集中管理 AppKey 等非敏感本地键值配置。
+- `Helpers/PushConnectionService.cs`：应用级单例 WebSocket 连接，负责启动连接、持续接收并将推送写入 SQLite。
+- `Helpers/HttpClientHelper.cs`：应用级 HTTP 客户端，复用连接并统一处理 GET、POST JSON、自定义请求、取消和错误响应。
+- `Converters/UnixTimestampToTimeConverter.cs`：将消息秒级 Unix 时间戳统一显示为设备本地日期时间 `yyyy-MM-dd HH:mm:ss`。
 
 ## 已知问题
 
@@ -41,3 +44,16 @@
 - 2026-07-15：设置页的 WebSocket 测试连接和手动发送统一改为序列化完整 `HxPushMsgModel` JSON；载荷携带已保存 AppKey、每条消息的 GUID、秒级时间戳，以及首次生成并持久化复用的安装级 Hwid。
 - 2026-07-15：设置页新增与测试连接按钮同行的“断开连接”按钮；WebSocket helper 新增连接状态事件，主动断开、服务端关闭或接收异常时统一恢复“测试连接可用、断开连接置灰”，连接成功时状态反转。
 - 2026-07-15：WebSocket helper 的连接方法改为接收 AppKey 并以 URL 查询参数提交握手校验；AppKey 变化时自动断开旧连接，设置页“测试连接”成功后直接保持接收，不再依赖自动发送测试消息完成登记。
+- 2026-07-15：AppKey 输入框增加完成事件；Android 键盘点“完成”或桌面按 Enter 时自动校验并保存，保存按钮复用同一逻辑，成功后显示短暂页面 Toast。
+- 2026-07-15：设置页新增服务器地址下拉框，提供局域网、正式地址和备用地址三个选项；选择后立即通过 `AppSettings` 保存并显示 Toast，已有连接会断开，后续测试连接和消息发送均使用当前选中的 WebSocket URI。
+- 2026-07-15：消息页为 Windows 增加标题右侧刷新按钮，解决桌面端无法使用触摸下拉手势的问题；Windows 按钮与 Android 下拉刷新共用同一刷新流程，加载期间禁用重复操作并显示刷新状态。
+- 2026-07-15：移除设置页 `OnDisappearing` 中的自动 WebSocket 断开，避免切换 Shell Tab 时中断连接；连接现在只在用户主动断开、切换服务器或发生网络/服务端异常时结束。
+- 2026-07-15：消息首批查询和分页查询继续在 SQLite 使用 `MsgDate DESC, ID DESC`，页面装载每批结果时也显式执行相同降序排序，确保最新消息始终显示在列表顶部且同秒消息顺序稳定。
+- 2026-07-15：本地 SQLite 消息限制为最新 10000 条，数据库初始化和每次写入后都会删除超量旧记录；WebSocket 提升为应用级共享连接，App 启动时初始化数据库并自动连接，未真正保存 AppKey 时跳转设置页，保存 AppKey 后自动连接。
+- 2026-07-15：共享 `HxPushMsgModel` 增加 `IsRead` 后，本地 SQLite 表同步增加兼容迁移和查询字段，避免新版在线推送消息保存时因旧表缺列失败。
+- 2026-07-15：`MsgDate` 从秒级 `int` 升级为毫秒级 `long`，本地旧数据初始化时自动乘以 1000；消息列表和详情时间显示到毫秒，WebSocket 缺省时间与测试消息同步使用 Unix 毫秒。
+- 2026-07-15：消息时间统一以服务端返回的 `MsgDate` 为准；HxPushApp 发送测试消息时不再生成时间，接收消息要求服务端提供有效 `MsgDate`，本地存储、分页和显示继续只使用该字段。
+- 2026-07-15：新增应用级 `HttpClientHelper`，复用单一 `HttpClient`，支持文本 GET、泛型 JSON GET/POST、自定义请求头和请求方法、取消令牌，并在非成功状态下返回包含状态码与响应正文的异常信息，为后续 HTTP 拉取消息提供基础。
+- 2026-07-15：消息列表在设备信息行右侧显示消息本地时分秒，消息详情增加独立时间字段；两处统一通过 Unix 时间转换器将 `MsgDate` 格式化为 `HH:mm:ss`，无效时间显示占位符。
+- 2026-07-15：消息列表和详情的时间格式补充年月日，统一调整为本地时间 `yyyy-MM-dd HH:mm:ss`。
+- 2026-07-15：消息列表移除消息 ID，毫秒级 `MsgDate` 仍用于精确排序但显示格式去掉毫秒；新增设备 ID 下拉筛选，设备列表来自 SQLite 去重查询，首批加载和滚动分页都在数据库层应用相同 Hwid 条件，并增加组合索引优化筛选性能。

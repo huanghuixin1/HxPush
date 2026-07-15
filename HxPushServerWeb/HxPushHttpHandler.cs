@@ -42,7 +42,7 @@ namespace HxPushServerWeb
             {
                 code = 0,
                 msg = "HxPushServerWeb is running.",
-                otherData = "Open /ws-test.html, connect WebSocket at /ws?appkey=..., or use GET/POST /api/messages."
+                otherData = "Open /ws-test.html for WebSocket or /webapi.html for HTTP APIs."
             });
         }
 
@@ -83,11 +83,11 @@ namespace HxPushServerWeb
             // ID 由服务端统一生成，避免信任客户端主键。
             message.ID = Guid.NewGuid().ToString("N");
 
-            if (message.MsgDate <= 0)
-            {
-                // 未提供发送时间时使用当前 UTC 秒级时间戳。
-                message.MsgDate = (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            }
+            // 无条件忽略客户端时间，InsertAsync 会生成唯一的服务端保存时间。
+            message.MsgDate = 0;
+
+            // 客户端不能自行声明已读，初始状态统一由服务端维护。
+            message.IsRead = false;
 
             // 入库和推送依赖这些核心字段。
             if (string.IsNullOrWhiteSpace(message.AppKey) ||
@@ -115,14 +115,23 @@ namespace HxPushServerWeb
                 return ToJsonResult(Error($"ID 已存在，不能重复写入：{message.ID}"));
             }
 
-            // 保存成功后再推送，保证客户端收到的消息已经持久化。
+            // 先以未读状态持久化，至少一个在线客户端收到后再更新为已读。
+            message.IsRead = true;
             var pushCount = await webSocketHandler.SendToAppKeyAsync(message, cancellationToken);
+            if (pushCount > 0)
+            {
+                await messageRepository.MarkAsReadAsync(message.ID, cancellationToken);
+            }
+            else
+            {
+                message.IsRead = false;
+            }
 
             return ToJsonResult(new HxHttpResModel
             {
                 code = 0,
                 msg = "保存成功",
-                otherData = $"ID={message.ID}; pushed={pushCount}"
+                otherData = $"ID={message.ID}; pushed={pushCount}; isRead={message.IsRead.ToString().ToLowerInvariant()}"
             });
         }
 
@@ -131,6 +140,7 @@ namespace HxPushServerWeb
         {
             // 查询参数使用小写名称，与公开接口约定保持一致。
             var appKey = request.Query["appkey"].ToString().Trim();
+            var hwid = request.Query["hwid"].ToString().Trim();
 
             if (string.IsNullOrWhiteSpace(appKey))
             {
@@ -155,8 +165,9 @@ namespace HxPushServerWeb
                     StatusCodes.Status403Forbidden);
             }
 
-            var messages = await messageRepository.GetPageAsync(
+            var messages = await messageRepository.GetPageAndMarkReadAsync(
                 appKey,
+                hwid,
                 pageIndex,
                 pageSize,
                 cancellationToken);
@@ -167,6 +178,38 @@ namespace HxPushServerWeb
                 code = 0,
                 msg = messages,
                 otherData = string.Empty
+            });
+        }
+
+        // 获取 AppKey 的全部未读消息，并原子标记本次返回记录为已读。
+        public async Task<IResult> HandleGetUnreadMessagesAsync(
+            HttpRequest request,
+            CancellationToken cancellationToken)
+        {
+            var appKey = request.Query["appkey"].ToString().Trim();
+            var hwid = request.Query["hwid"].ToString().Trim();
+            if (string.IsNullOrWhiteSpace(appKey))
+            {
+                return ToJsonResult(Error("appkey 不能为空。"));
+            }
+
+            if (!appKeyManager.Exists(appKey))
+            {
+                return ToJsonResult(
+                    Error($"AppKey 不存在：{appKey}"),
+                    StatusCodes.Status403Forbidden);
+            }
+
+            var messages = await messageRepository.GetUnreadAndMarkReadAsync(
+                appKey,
+                hwid,
+                cancellationToken);
+
+            return ToJsonResult(new HxHttpResModel
+            {
+                code = 0,
+                msg = messages,
+                otherData = $"count={messages.Count}"
             });
         }
 
@@ -189,7 +232,7 @@ namespace HxPushServerWeb
             });
         }
 
-        // 使用 JSON 字符串数组覆盖 AppKey，并同步更新文件和内存缓存。
+        // 使用带备注的 JSON 对象数组覆盖 AppKey，并同步更新文件和内存缓存。
         public async Task<IResult> HandleReplaceAppKeysAsync(
             HttpRequest request,
             CancellationToken cancellationToken)
@@ -203,20 +246,20 @@ namespace HxPushServerWeb
 
             using var reader = new StreamReader(request.Body, Encoding.UTF8);
             var json = await reader.ReadToEndAsync(cancellationToken);
-            string[]? appKeys;
+            HxPushAppKeyModel[]? appKeys;
 
             try
             {
-                appKeys = JsonSerializer.Deserialize<string[]>(json);
+                appKeys = DeserializeAppKeys(json);
             }
             catch (JsonException)
             {
-                return ToJsonResult(Error("请求体必须是 AppKey 字符串数组。"));
+                return ToJsonResult(Error("请求体必须是包含 AppKey 和 Remark 的对象数组。"));
             }
 
             if (appKeys is null)
             {
-                return ToJsonResult(Error("请求体必须是 AppKey 字符串数组。"));
+                return ToJsonResult(Error("请求体必须是包含 AppKey 和 Remark 的对象数组。"));
             }
 
             try
@@ -235,6 +278,43 @@ namespace HxPushServerWeb
                 msg = "保存成功",
                 otherData = $"count={savedCount}"
             });
+        }
+
+        // 兼容旧字符串数组，新对象数组则保留每条 AppKey 的备注。
+        private static HxPushAppKeyModel[]? DeserializeAppKeys(string json)
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            var values = new List<HxPushAppKeyModel>();
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+            foreach (var element in document.RootElement.EnumerateArray())
+            {
+                if (element.ValueKind == JsonValueKind.String)
+                {
+                    values.Add(new HxPushAppKeyModel { AppKey = element.GetString() ?? string.Empty });
+                    continue;
+                }
+
+                if (element.ValueKind != JsonValueKind.Object)
+                {
+                    return null;
+                }
+
+                var value = element.Deserialize<HxPushAppKeyModel>(options);
+                if (value is null)
+                {
+                    return null;
+                }
+
+                values.Add(value);
+            }
+
+            return values.ToArray();
         }
 
         // 管理接口统一从自定义请求头读取密码，避免密码出现在 URL 和访问日志中。

@@ -9,17 +9,31 @@ namespace HxPushApp.Helpers
     public static class AppSettings
     {
         public const string DefaultAppKey = "2222";
+        public const string DefaultServerAddress = "ws://192.168.31.119:5212/ws";
 
         private static class Keys
         {
             public const string AppKey = "settings.app_key";
             public const string DeviceId = "settings.device_id";
+            public const string ServerAddress = "settings.server_address";
         }
 
         public static string AppKey
         {
-            get => Preferences.Default.Get(Keys.AppKey, DefaultAppKey);
+            get => Preferences.Default.Get(Keys.AppKey, string.Empty);
             set => Preferences.Default.Set(Keys.AppKey, value);
+        }
+
+        public static string AppKeyInputValue => string.IsNullOrWhiteSpace(AppKey)
+            ? DefaultAppKey
+            : AppKey;
+
+        public static bool HasAppKey => !string.IsNullOrWhiteSpace(AppKey);
+
+        public static string ServerAddress
+        {
+            get => Preferences.Default.Get(Keys.ServerAddress, DefaultServerAddress);
+            set => Preferences.Default.Set(Keys.ServerAddress, value);
         }
 
         /// <summary>

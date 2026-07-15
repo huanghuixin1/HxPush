@@ -4,24 +4,61 @@
              x:Class="HxPushApp.MessagesPage"
              Title="消息">
 
-    <Grid RowDefinitions="Auto,*"
+    <Grid RowDefinitions="Auto,Auto,*"
           Padding="20,18"
           RowSpacing="14">
 
-        <VerticalStackLayout Spacing="4">
-            <Label
-                Text="消息列表"
-                FontSize="28"
-                FontAttributes="Bold" />
+        <Grid
+            ColumnDefinitions="*,Auto"
+            ColumnSpacing="12">
+            <VerticalStackLayout Spacing="4">
+                <Label
+                    Text="消息列表"
+                    FontSize="28"
+                    FontAttributes="Bold" />
 
+                <Label
+                    Text="{Binding SummaryText}"
+                    FontSize="14"
+                    TextColor="{AppThemeBinding Light=#666666, Dark=#B8B8B8}" />
+            </VerticalStackLayout>
+
+            <Button
+                x:Name="RefreshMessagesButton"
+                Grid.Column="1"
+                Text="↻"
+                FontSize="24"
+                Padding="0"
+                WidthRequest="44"
+                HeightRequest="44"
+                IsVisible="{OnPlatform WinUI=True, Default=False}"
+                ToolTipProperties.Text="刷新消息"
+                SemanticProperties.Description="刷新消息"
+                Clicked="OnRefreshButtonClicked"
+                VerticalOptions="Center" />
+        </Grid>
+
+        <Grid
+            Grid.Row="1"
+            ColumnDefinitions="Auto,*"
+            ColumnSpacing="10">
             <Label
-                Text="{Binding SummaryText}"
+                Text="设备"
                 FontSize="14"
+                VerticalOptions="Center"
                 TextColor="{AppThemeBinding Light=#666666, Dark=#B8B8B8}" />
-        </VerticalStackLayout>
+
+            <Picker
+                x:Name="DeviceFilterPicker"
+                Grid.Column="1"
+                Title="选择设备"
+                ItemsSource="{Binding DeviceFilters}"
+                SelectedIndexChanged="OnDeviceFilterChanged" />
+        </Grid>
 
         <RefreshView
-            Grid.Row="1"
+            x:Name="MessagesRefreshView"
+            Grid.Row="2"
             Refreshing="OnRefreshing">
             <CollectionView
                 ItemsSource="{Binding Messages}"
@@ -59,7 +96,7 @@
                             </Border.StrokeShape>
 
                             <Grid
-                                ColumnDefinitions="*,Auto"
+                                ColumnDefinitions="*"
                                 RowDefinitions="Auto,Auto"
                                 ColumnSpacing="12"
                                 RowSpacing="8">
@@ -70,16 +107,10 @@
                                     MaxLines="2"
                                     LineBreakMode="TailTruncation" />
 
-                                <Label
-                                    Grid.Column="1"
-                                    Text="{Binding ID, StringFormat='#{0}'}"
-                                    FontSize="13"
-                                    TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}" />
-
-                                <HorizontalStackLayout
+                                <Grid
                                     Grid.Row="1"
-                                    Grid.ColumnSpan="2"
-                                    Spacing="8">
+                                    ColumnDefinitions="Auto,*,Auto"
+                                    ColumnSpacing="8">
                                     <Label
                                         Text="设备"
                                         FontSize="13"
@@ -87,10 +118,18 @@
                                         TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}" />
 
                                     <Label
+                                        Grid.Column="1"
                                         Text="{Binding Hwid}"
                                         FontSize="13"
+                                        LineBreakMode="TailTruncation"
                                         TextColor="{AppThemeBinding Light=#444444, Dark=#DDDDDD}" />
-                                </HorizontalStackLayout>
+
+                                    <Label
+                                        Grid.Column="2"
+                                        Text="{Binding MsgDate, Converter={StaticResource UnixTimestampToTimeConverter}}"
+                                        FontSize="13"
+                                        TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}" />
+                                </Grid>
                             </Grid>
                         </Border>
                     </DataTemplate>
@@ -111,7 +150,7 @@
 
         <Border
             x:Name="NoMoreDataToast"
-            Grid.RowSpan="2"
+            Grid.RowSpan="3"
             Margin="0,0,0,24"
             Padding="16,10"
             IsVisible="False"

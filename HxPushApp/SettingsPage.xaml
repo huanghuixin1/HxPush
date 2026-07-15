@@ -39,7 +39,8 @@
                         Placeholder="请输入 AppKey"
                         ClearButtonVisibility="WhileEditing"
                         MaxLength="128"
-                        ReturnType="Done" />
+                        ReturnType="Done"
+                        Completed="OnAppKeyEntryCompleted" />
 
                     <Button
                         x:Name="SaveAppKeyButton"
@@ -53,6 +54,25 @@
                     x:Name="AppKeySaveStatusLabel"
                     Text="保存在当前设备，用于区分不同用户。"
                     FontSize="13"
+                    TextColor="{AppThemeBinding Light=#666666, Dark=#B8B8B8}" />
+            </VerticalStackLayout>
+
+            <VerticalStackLayout Spacing="8">
+                <Label
+                    Text="服务器地址"
+                    FontSize="16"
+                    FontAttributes="Bold" />
+
+                <Picker
+                    x:Name="ServerAddressPicker"
+                    Title="请选择服务器"
+                    ItemDisplayBinding="{Binding Name}"
+                    SelectedIndexChanged="OnServerAddressSelected" />
+
+                <Label
+                    x:Name="ServerAddressStatusLabel"
+                    FontSize="13"
+                    LineBreakMode="CharacterWrap"
                     TextColor="{AppThemeBinding Light=#666666, Dark=#B8B8B8}" />
             </VerticalStackLayout>
 
@@ -107,6 +127,27 @@
                     LineBreakMode="WordWrap"
                     TextColor="{AppThemeBinding Light=#666666, Dark=#B8B8B8}" />
             </ScrollView>
+        </Border>
+
+        <Border
+            x:Name="SettingsToast"
+            Grid.RowSpan="4"
+            Margin="0,0,0,24"
+            Padding="16,10"
+            IsVisible="False"
+            Opacity="0"
+            InputTransparent="True"
+            HorizontalOptions="Center"
+            VerticalOptions="End"
+            StrokeThickness="0"
+            BackgroundColor="#CC222222">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="18" />
+            </Border.StrokeShape>
+            <Label
+                x:Name="SettingsToastLabel"
+                FontSize="14"
+                TextColor="White" />
         </Border>
     </Grid>
 </ContentPage>

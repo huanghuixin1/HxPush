@@ -31,15 +31,32 @@
                 </Border.StrokeShape>
 
                 <VerticalStackLayout Spacing="12">
-                    <VerticalStackLayout Spacing="4">
-                        <Label
-                            Text="设备"
-                            FontSize="13"
-                            TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}" />
-                        <Label
-                            Text="{Binding Hwid}"
-                            FontSize="16" />
-                    </VerticalStackLayout>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
+                        <VerticalStackLayout Spacing="4">
+                            <Label
+                                Text="设备"
+                                FontSize="13"
+                                TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}" />
+                            <Label
+                                Text="{Binding Hwid}"
+                                FontSize="16" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout
+                            Grid.Column="1"
+                            Spacing="4"
+                            HorizontalOptions="End">
+                            <Label
+                                Text="时间"
+                                FontSize="13"
+                                HorizontalTextAlignment="End"
+                                TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}" />
+                            <Label
+                                Text="{Binding MsgDate, Converter={StaticResource UnixTimestampToTimeConverter}}"
+                                FontSize="16"
+                                HorizontalTextAlignment="End" />
+                        </VerticalStackLayout>
+                    </Grid>
 
                     <BoxView
                         HeightRequest="1"

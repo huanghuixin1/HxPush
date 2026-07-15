@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HxPush Web API 测试</title>
+  <style>
+    /* 页面只承载 HTTP Web API 请求和响应测试。 */
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #eef2f6;
+      color: #172033;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #eef2f6;
+    }
+
+    main {
+      width: min(1120px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0;
+    }
+
+    h1,
+    h2 {
+      margin: 0;
+      line-height: 1.25;
+    }
+
+    h1 {
+      margin-bottom: 16px;
+      font-size: 24px;
+    }
+
+    h2 {
+      margin-bottom: 14px;
+      font-size: 17px;
+    }
+
+    .panel {
+      padding: 18px;
+      border: 1px solid #d3dbe6;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+    }
+
+    .base-panel,
+    .response-panel {
+      margin-bottom: 14px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .two,
+    .three {
+      display: grid;
+      gap: 10px;
+    }
+
+    .two {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .three {
+      grid-template-columns: 2fr 1fr 1fr;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    input,
+    select,
+    textarea,
+    button {
+      font: inherit;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid #bdc7d5;
+      border-radius: 6px;
+      padding: 10px 12px;
+      background: #fff;
+      color: #172033;
+      outline: none;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: #176b45;
+      box-shadow: 0 0 0 3px rgba(23, 107, 69, 0.14);
+    }
+
+    textarea {
+      min-height: 190px;
+      resize: vertical;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      line-height: 1.5;
+    }
+
+    button {
+      min-height: 40px;
+      border: 0;
+      border-radius: 6px;
+      padding: 8px 14px;
+      background: #176b45;
+      color: #fff;
+      cursor: pointer;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    button.secondary {
+      background: #475467;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .response {
+      min-height: 230px;
+      max-height: 440px;
+      overflow: auto;
+      border: 1px solid #d3dbe6;
+      border-radius: 6px;
+      padding: 12px;
+      background: #101828;
+      color: #e4e7ec;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 820px) {
+      main {
+        width: min(100% - 24px, 1120px);
+        padding: 20px 0;
+      }
+
+      .grid,
+      .two,
+      .three {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>HxPush Web API 测试</h1>
+
+    <section class="panel base-panel">
+      <label for="baseUrl">HTTP Base URL</label>
+      <input id="baseUrl" autocomplete="off">
+    </section>
+
+    <div class="grid">
+      <!-- GET /api/messages 的分页参数测试。 -->
+      <section class="panel">
+        <h2>获取消息列表</h2>
+        <div class="field">
+          <label for="listAppKey">appkey</label>
+          <input id="listAppKey" value="app-demo" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="listHwid">hwid（可选）</label>
+          <input id="listHwid" placeholder="留空查询全部设备" autocomplete="off">
+        </div>
+        <div class="two">
+          <div class="field">
+            <label for="listPageIndex">pageindex</label>
+            <input id="listPageIndex" type="number" min="1" step="1" value="1">
+          </div>
+          <div class="field">
+            <label for="listPageSize">pagesize</label>
+            <input id="listPageSize" type="number" min="1" step="1" value="10">
+          </div>
+        </div>
+        <div class="actions">
+          <button id="getMessagesButton" type="button">获取本页消息</button>
+          <button id="getUnreadButton" class="secondary" type="button">获取全部未读</button>
+        </div>
+      </section>
+
+      <!-- 其余 HTTP 接口通过方法、路径和 JSON 请求体组合测试。 -->
+      <section class="panel">
+        <h2>通用 API 调用</h2>
+        <div class="two">
+          <div class="field">
+            <label for="apiPath">接口</label>
+            <select id="apiPath">
+              <option value="/" data-method="GET">GET /</option>
+              <option value="/api/messages" data-method="POST">POST /api/messages</option>
+              <option value="/api/appkeys" data-method="GET">GET /api/appkeys</option>
+              <option value="/api/appkeys" data-method="PUT">PUT /api/appkeys</option>
+              <option value="/ws" data-method="GET">GET /ws 普通 HTTP</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="httpMethod">方法</label>
+            <select id="httpMethod">
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="managerPassword">AppKey 管理密码</label>
+          <input id="managerPassword" type="password" value="123" autocomplete="off">
+        </div>
+
+        <div class="field">
+          <label for="requestBody">请求体 JSON</label>
+          <textarea id="requestBody" spellcheck="false"></textarea>
+        </div>
+
+        <div class="actions">
+          <button id="sendHttpButton" type="button">发送请求</button>
+          <button id="fillMessageButton" class="secondary" type="button">消息示例</button>
+          <button id="fillAppKeysButton" class="secondary" type="button">AppKey 示例</button>
+          <button id="clearBodyButton" class="secondary" type="button">清空</button>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel response-panel">
+      <h2>HTTP Response</h2>
+      <div id="httpResponse" class="response" role="log" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script>
+    // 缓存 HTTP 测试控件。
+    const baseUrlInput = document.querySelector("#baseUrl");
+    const listAppKeyInput = document.querySelector("#listAppKey");
+    const listHwidInput = document.querySelector("#listHwid");
+    const listPageIndexInput = document.querySelector("#listPageIndex");
+    const listPageSizeInput = document.querySelector("#listPageSize");
+    const getMessagesButton = document.querySelector("#getMessagesButton");
+    const getUnreadButton = document.querySelector("#getUnreadButton");
+    const apiPathSelect = document.querySelector("#apiPath");
+    const httpMethodSelect = document.querySelector("#httpMethod");
+    const managerPasswordInput = document.querySelector("#managerPassword");
+    const requestBodyInput = document.querySelector("#requestBody");
+    const sendHttpButton = document.querySelector("#sendHttpButton");
+    const fillMessageButton = document.querySelector("#fillMessageButton");
+    const fillAppKeysButton = document.querySelector("#fillAppKeysButton");
+    const clearBodyButton = document.querySelector("#clearBodyButton");
+    const httpResponseBox = document.querySelector("#httpResponse");
+
+    baseUrlInput.value = getDefaultHttpBaseUrl();
+    fillSampleMessage();
+
+    apiPathSelect.addEventListener("change", syncMethodWithPath);
+    getMessagesButton.addEventListener("click", getMessages);
+    getUnreadButton.addEventListener("click", getUnreadMessages);
+    sendHttpButton.addEventListener("click", sendHttpRequest);
+    fillMessageButton.addEventListener("click", fillSampleMessage);
+    fillAppKeysButton.addEventListener("click", fillSampleAppKeys);
+    clearBodyButton.addEventListener("click", () => requestBodyInput.value = "");
+
+    function getDefaultHttpBaseUrl() {
+      if (location.protocol === "http:" || location.protocol === "https:") {
+        return `${location.protocol}//${location.host}`;
+      }
+
+      return "http://localhost:5212";
+    }
+
+    function syncMethodWithPath() {
+      httpMethodSelect.value = apiPathSelect.selectedOptions[0]?.dataset.method || "GET";
+    }
+
+    // 填充 POST /api/messages 的完整消息模型。
+    function fillSampleMessage() {
+      const now = Date.now();
+      selectApiOption("/api/messages", "POST");
+      requestBodyInput.value = JSON.stringify({
+        ID: `msg-${now}`,
+        AppKey: "app-demo",
+        Hwid: "webapi-test-device",
+        Msg: "Web API 推送测试",
+        IsRead: false
+      }, null, 2);
+    }
+
+    // 填充 PUT /api/appkeys 的带备注对象数组。
+    function fillSampleAppKeys() {
+      selectApiOption("/api/appkeys", "PUT");
+      requestBodyInput.value = JSON.stringify([
+        { AppKey: "app-demo", Remark: getToday() },
+        { AppKey: "app-mobile", Remark: "移动端测试" }
+      ], null, 2);
+    }
+
+    function selectApiOption(path, method) {
+      const option = [...apiPathSelect.options].find(item =>
+        item.value === path && item.dataset.method === method);
+
+      if (option) {
+        option.selected = true;
+      }
+
+      syncMethodWithPath();
+    }
+
+    async function getMessages() {
+      const baseUrl = normalizeBaseUrl();
+      const appKey = listAppKeyInput.value.trim();
+
+      if (!baseUrl || !appKey) {
+        renderHttpResponse("HTTP Base URL 和 appkey 不能为空。", true);
+        return;
+      }
+
+      const query = new URLSearchParams({
+        appkey: appKey,
+        pageindex: listPageIndexInput.value,
+        pagesize: listPageSizeInput.value
+      });
+      appendOptionalHwid(query);
+
+      await executeRequest(`${baseUrl}/api/messages?${query}`, { method: "GET" });
+    }
+
+    // 获取全部未读消息；服务端返回后会把这些记录标记为已读。
+    async function getUnreadMessages() {
+      const baseUrl = normalizeBaseUrl();
+      const appKey = listAppKeyInput.value.trim();
+
+      if (!baseUrl || !appKey) {
+        renderHttpResponse("HTTP Base URL 和 appkey 不能为空。", true);
+        return;
+      }
+
+      const query = new URLSearchParams({ appkey: appKey });
+      appendOptionalHwid(query);
+      await executeRequest(`${baseUrl}/api/messages/unread?${query}`, { method: "GET" });
+    }
+
+    // 留空时保持按 AppKey 查询全部设备，填写后执行 Hwid 精确匹配。
+    function appendOptionalHwid(query) {
+      const hwid = listHwidInput.value.trim();
+      if (hwid) {
+        query.set("hwid", hwid);
+      }
+    }
+
+    async function sendHttpRequest() {
+      const baseUrl = normalizeBaseUrl();
+      const path = apiPathSelect.value;
+      const method = httpMethodSelect.value;
+
+      if (!baseUrl) {
+        renderHttpResponse("HTTP Base URL 不能为空。", true);
+        return;
+      }
+
+      const headers = {};
+      const options = { method };
+
+      if (path === "/api/appkeys") {
+        const password = managerPasswordInput.value;
+        if (!password) {
+          renderHttpResponse("AppKey 管理密码不能为空。", true);
+          return;
+        }
+
+        headers["X-AppKey-Manager-Password"] = password;
+      }
+
+      if (method !== "GET") {
+        headers["Content-Type"] = "application/json";
+        options.body = requestBodyInput.value;
+      }
+
+      if (Object.keys(headers).length > 0) {
+        options.headers = headers;
+      }
+
+      await executeRequest(`${baseUrl}${path}`, options);
+    }
+
+    async function executeRequest(url, options) {
+      renderHttpResponse(`请求中...\n${options.method} ${url}`);
+
+      try {
+        const response = await fetch(url, options);
+        const text = await response.text();
+        renderHttpResponse(`HTTP ${response.status}\n${tryFormatJson(text)}`);
+      } catch (error) {
+        renderHttpResponse(`请求失败：${error.message}`, true);
+      }
+    }
+
+    function normalizeBaseUrl() {
+      return baseUrlInput.value.trim().replace(/\/+$/, "");
+    }
+
+    function getToday() {
+      const now = new Date();
+      const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+      return localDate.toISOString().slice(0, 10);
+    }
+
+    function renderHttpResponse(message, isError = false) {
+      httpResponseBox.textContent = `${isError ? "! " : ""}${message}`;
+    }
+
+    function tryFormatJson(text) {
+      try {
+        return JSON.stringify(JSON.parse(text), null, 2);
+      } catch {
+        return text;
+      }
+    }
+  </script>
+</body>
+</html>

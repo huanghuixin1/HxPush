@@ -1,5 +1,4 @@
 using HxPushApp.Helpers;
-using HxPushApp.Helpers.Sqlite;
 using HxPushApp.models.Message;
 using System.Text.Json;
 
@@ -8,32 +7,52 @@ namespace HxPushApp
     public partial class SettingsPage : ContentPage
     {
         private const int MaxWebSocketLogLines = 30;
-        private static readonly Uri WebSocketServerUri = new("ws://192.168.31.119:5212/ws");
+        private static readonly ServerAddressOption[] ServerAddressOptions =
+        [
+            new("局域网", new Uri(AppSettings.DefaultServerAddress)),
+            new("正式地址", new Uri("ws://43.142.82.217:5212/ws")),
+            new("备用地址", new Uri("ws://push.huixingfifa.top:5212/ws"))
+        ];
 
         private readonly Queue<string> webSocketLogLines = new();
-        private readonly WebSocketClientHelper webSocketClient = new(WebSocketServerUri);
-        private readonly SqliteHelper sqliteHelper = SqliteHelper.Instance;
+        private readonly PushConnectionService pushConnectionService = PushConnectionService.Instance;
+        private bool isSettingsToastVisible;
+        private bool isServerPickerInitialized;
 
         public SettingsPage()
         {
             InitializeComponent();
 
-            AppKeyEntry.Text = AppSettings.AppKey;
+            AppKeyEntry.Text = AppSettings.AppKeyInputValue;
+            InitializeServerAddressPicker();
 
-            // WebSocketClientHelper 只负责通信；页面订阅事件后统一把消息写到日志区域。
-            webSocketClient.StatusChanged += (_, message) => AppendWebSocketLog(message);
-            webSocketClient.ConnectionStateChanged += (_, isConnected) =>
+            pushConnectionService.LogMessage += (_, message) => AppendWebSocketLog(message);
+            pushConnectionService.ConnectionStateChanged += (_, isConnected) =>
                 UpdateWebSocketButtonStates(isConnected);
-            webSocketClient.TextMessageReceived += async (_, message) => await HandleWebSocketTextMessageAsync(message);
-            webSocketClient.BinaryMessageReceived += (_, length) => AppendWebSocketLog($"接收：{length} 字节二进制消息。");
 
-            UpdateWebSocketButtonStates(webSocketClient.IsConnected);
+            UpdateWebSocketButtonStates(pushConnectionService.IsConnected);
         }
 
         /// <summary>
         /// 保存 AppKey 到 MAUI Preferences。空值不会覆盖已经保存的配置。
         /// </summary>
-        private void OnSaveAppKeyClicked(object? sender, EventArgs e)
+        private async void OnSaveAppKeyClicked(object? sender, EventArgs e)
+        {
+            await SaveAppKeyAsync("AppKey 已保存");
+        }
+
+        /// <summary>
+        /// 用户在 AppKey 输入框按下完成键时自动保存。
+        /// </summary>
+        private async void OnAppKeyEntryCompleted(object? sender, EventArgs e)
+        {
+            await SaveAppKeyAsync("AppKey 已自动保存");
+        }
+
+        /// <summary>
+        /// 校验并保存 AppKey；空值不会覆盖已经保存的配置。
+        /// </summary>
+        private async Task SaveAppKeyAsync(string successMessage)
         {
             var appKey = AppKeyEntry.Text?.Trim();
             if (string.IsNullOrWhiteSpace(appKey))
@@ -55,15 +74,90 @@ namespace HxPushApp
             {
                 AppKeySaveStatusLabel.Text = $"保存失败：{ex.Message}";
                 AppKeySaveStatusLabel.TextColor = Colors.IndianRed;
+                return;
+            }
+
+            _ = ConnectAfterAppKeySavedAsync();
+            await ShowSettingsToastAsync(successMessage);
+        }
+
+        private async Task ConnectAfterAppKeySavedAsync()
+        {
+            try
+            {
+                await pushConnectionService.ConnectAsync();
+            }
+            catch (Exception ex)
+            {
+                AppendWebSocketLog($"自动连接失败：{ex.Message}");
             }
         }
 
-        protected override void OnDisappearing()
+        /// <summary>
+        /// 显示短暂的页面 Toast，避免为单个提示引入额外依赖。
+        /// </summary>
+        private async Task ShowSettingsToastAsync(string message)
         {
-            base.OnDisappearing();
+            if (isSettingsToastVisible)
+            {
+                return;
+            }
 
-            // 离开设置页时断开连接，避免后台接收任务继续占用资源。
-            _ = webSocketClient.DisconnectAsync();
+            isSettingsToastVisible = true;
+            try
+            {
+                SettingsToastLabel.Text = message;
+                SettingsToast.IsVisible = true;
+                await SettingsToast.FadeToAsync(1, 150);
+                await Task.Delay(1500);
+                await SettingsToast.FadeToAsync(0, 150);
+            }
+            finally
+            {
+                SettingsToast.IsVisible = false;
+                isSettingsToastVisible = false;
+            }
+        }
+
+        /// <summary>
+        /// 初始化服务器选项，并恢复上次保存的地址。
+        /// </summary>
+        private void InitializeServerAddressPicker()
+        {
+            ServerAddressPicker.ItemsSource = ServerAddressOptions;
+
+            var selectedOption = ServerAddressOptions.FirstOrDefault(
+                option => string.Equals(
+                    option.Uri.AbsoluteUri,
+                    AppSettings.ServerAddress,
+                    StringComparison.OrdinalIgnoreCase)) ?? ServerAddressOptions[0];
+
+            AppSettings.ServerAddress = selectedOption.Uri.AbsoluteUri;
+            ServerAddressPicker.SelectedItem = selectedOption;
+            ServerAddressStatusLabel.Text = selectedOption.Uri.AbsoluteUri;
+            isServerPickerInitialized = true;
+        }
+
+        /// <summary>
+        /// 切换服务器后立即保存；已有连接会先断开，避免继续使用旧地址。
+        /// </summary>
+        private async void OnServerAddressSelected(object? sender, EventArgs e)
+        {
+            if (!isServerPickerInitialized ||
+                ServerAddressPicker.SelectedItem is not ServerAddressOption selectedOption)
+            {
+                return;
+            }
+
+            AppSettings.ServerAddress = selectedOption.Uri.AbsoluteUri;
+            ServerAddressStatusLabel.Text = selectedOption.Uri.AbsoluteUri;
+
+            if (pushConnectionService.IsConnected)
+            {
+                await pushConnectionService.DisconnectAsync();
+            }
+
+            await ShowSettingsToastAsync($"已切换到{selectedOption.Name}");
         }
 
         /// <summary>
@@ -75,7 +169,7 @@ namespace HxPushApp
 
             try
             {
-                await webSocketClient.DisconnectAsync();
+                await pushConnectionService.DisconnectAsync();
             }
             catch (Exception ex)
             {
@@ -83,7 +177,7 @@ namespace HxPushApp
             }
             finally
             {
-                UpdateWebSocketButtonStates(webSocketClient.IsConnected);
+                UpdateWebSocketButtonStates(pushConnectionService.IsConnected);
             }
         }
 
@@ -107,8 +201,8 @@ namespace HxPushApp
                 var payload = JsonSerializer.Serialize(pushMessage);
 
                 // 手动发送前也使用已保存 AppKey 完成握手校验。
-                await webSocketClient.ConnectAsync(AppSettings.AppKey);
-                await webSocketClient.SendTextAsync(payload);
+                await pushConnectionService.ConnectAsync();
+                await pushConnectionService.SendTextAsync(payload);
                 AppendWebSocketLog($"发送：{payload}");
             }
             catch (OperationCanceledException)
@@ -135,7 +229,7 @@ namespace HxPushApp
             try
             {
                 // AppKey 随握手 URL 提交，连接成功即表示服务端校验通过。
-                await webSocketClient.ConnectAsync(AppSettings.AppKey);
+                await pushConnectionService.ConnectAsync();
                 AppendWebSocketLog("AppKey 校验通过，连接已保持，正在持续接收服务端消息。");
             }
             catch (OperationCanceledException)
@@ -148,7 +242,7 @@ namespace HxPushApp
             }
             finally
             {
-                UpdateWebSocketButtonStates(webSocketClient.IsConnected);
+                UpdateWebSocketButtonStates(pushConnectionService.IsConnected);
             }
         }
 
@@ -169,92 +263,13 @@ namespace HxPushApp
         /// </summary>
         private static HxPushMsgModel CreateTestPushMessage(string message)
         {
-            var unixSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
             return new HxPushMsgModel
             {
                 ID = Guid.NewGuid().ToString("N"),
                 AppKey = AppSettings.AppKey,
                 Hwid = AppSettings.DeviceId,
-                MsgDate = unixSeconds > int.MaxValue ? int.MaxValue : (int)unixSeconds,
                 Msg = message
             };
-        }
-
-        /// <summary>
-        /// 处理 WebSocket 文本消息：先展示日志，再尝试按 HxPushMsgModel JSON 保存到 SQLite。
-        /// WebSocketClientHelper 不知道 SQLite，SqliteHelper 也不知道 WebSocket，这里只做流程编排。
-        /// </summary>
-        private async Task HandleWebSocketTextMessageAsync(string message)
-        {
-            AppendWebSocketLog($"接收：{message}");
-
-            if (!TryParsePushMessage(message, out var pushMessage))
-            {
-                return;
-            }
-
-            try
-            {
-                await sqliteHelper.SaveMessageAsync(pushMessage);
-                AppendWebSocketLog($"已保存消息：{pushMessage.ID}");
-            }
-            catch (Exception ex)
-            {
-                AppendWebSocketLog($"保存消息失败：{ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// 将服务端文本解析为推送消息模型；普通 echo、connected 等非 JSON 文本不会入库。
-        /// </summary>
-        private static bool TryParsePushMessage(
-            string message,
-            out HxPushMsgModel pushMessage)
-        {
-            pushMessage = new HxPushMsgModel();
-
-            if (string.IsNullOrWhiteSpace(message) || !message.TrimStart().StartsWith('{'))
-            {
-                return false;
-            }
-
-            try
-            {
-                var parsedMessage = JsonSerializer.Deserialize<HxPushMsgModel>(
-                    message,
-                    new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    });
-
-                if (parsedMessage is null ||
-                    string.IsNullOrWhiteSpace(parsedMessage.AppKey) ||
-                    string.IsNullOrWhiteSpace(parsedMessage.Hwid) ||
-                    string.IsNullOrWhiteSpace(parsedMessage.Msg))
-                {
-                    return false;
-                }
-
-                if (string.IsNullOrWhiteSpace(parsedMessage.ID))
-                {
-                    parsedMessage.ID = Guid.NewGuid().ToString("N");
-                }
-
-                if (parsedMessage.MsgDate <= 0)
-                {
-                    parsedMessage.MsgDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds() > int.MaxValue
-                        ? int.MaxValue
-                        : (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                }
-
-                pushMessage = parsedMessage;
-                return true;
-            }
-            catch (JsonException)
-            {
-                return false;
-            }
         }
 
         /// <summary>
@@ -275,4 +290,6 @@ namespace HxPushApp
             });
         }
     }
+
+    public sealed record ServerAddressOption(string Name, Uri Uri);
 }

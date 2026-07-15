@@ -8,12 +8,15 @@
 - 修改代码前，先理解当前项目结构。
 - 重要结论不要只放在聊天里，要写回本文件。
 - 每次完成任务后，在下面的「进度记录」追加一段总结。
-- 每完成一个 Web 接口，都要同步在 `wwwroot/ws-test.html` 中增加对应的测试调用。
+- 每完成一个 Web API，都要同步在 `wwwroot/webapi.html` 中增加对应的测试调用；`wwwroot/ws-test.html` 只测试 WebSocket。
 - 后续所有代码调整都必须同步添加或更新精简注释，重点说明职责、意图和关键分支，避免逐行复述代码。
 
 ## 重要文件
+- `HxPushAppKeyModel.cs`：AppKey 和备注的管理接口/持久化模型。
 - `HxPushAppKeyManager.cs`：缓存、读取和覆盖保存 AppKey，并校验管理密码。
 - `wwwroot/appkeyManager.html`：只负责受密码保护的 AppKey 读取与编辑。
+- `wwwroot/webapi.html`：只负责 HTTP Web API 测试。
+- `wwwroot/ws-test.html`：只负责 WebSocket 连接、推送和接收测试。
 
 ## 已知问题
 
@@ -39,3 +42,10 @@
 - 2026-07-15: 为 HxPushServerWeb 手写源码补齐精简注释，覆盖应用装配、HTTP、WebSocket、SQLite、AppKey 管理、项目配置和测试页面；长期要求后续代码调整必须同步维护注释。
 - 2026-07-15: WebSocket `/ws` 改为在握手 URL 中接收 `appkey` 并于协议升级前校验，无效值返回 403；连接建立后 AppKey 固定，消息 AppKey 不一致会关闭连接，测试页面同步增加握手 AppKey 输入。
 - 2026-07-15: 新增 `/appkeyManager.html` 和受管理密码保护的 `GET/PUT /api/appkeys`；密码存放于运行目录 `App_Data/appkey-password.txt`，缺失时默认为 `123`。`HxPushAppKeyManager.Exists` 改为查询启动时加载、管理保存时同步更新的内存缓存，不再逐请求读取白名单文件；`ws-test.html` 同步增加管理接口测试入口。
+- 2026-07-15: AppKey 记录增加 `Remark` 备注，旧版纯文本 Key 自动兼容并以文件创建日期作为默认备注，保存后使用 JSON Lines 持久化；`appkeyManager.html` 改为 Key/备注表格，支持一键安全随机生成并立即添加，备注默认当天日期。
+- 2026-07-15: `appkeyManager.html` 在管理密码验证成功后将密码保存到当前站点 `localStorage`，下次打开自动填入；密码错误会移除旧记录，并提供“清除记忆”按钮主动清除浏览器存储。
+- 2026-07-15: 测试页面按职责拆分：`ws-test.html` 仅保留 WebSocket，新增 `pushByAppKey` 构造并发送 `HxPushMsgModel`，服务端将合法 WS 入站消息广播给同 AppKey 连接；所有 HTTP 接口测试迁移到新页面 `webapi.html`，长期规则同步更新。
+- 2026-07-15: 消息表和 `HxPushMsgModel` 增加 `IsRead`：HTTP 推送无在线客户端时保持未读，至少推送成功一次后更新已读；新增 `GET /api/messages/unread?appkey=...` 获取全部未读，未读接口和现有分页列表都会在事务内把本次返回的未读记录标记为已读，`webapi.html` 同步增加测试按钮。
+- 2026-07-15: 修复连续保存消息时间相同：`MsgDate` 升级为 Unix 毫秒 `long`，`InsertAsync` 基于数据库最大值和当前时间生成严格递增的服务端保存时间，并同步写入 `CreatedAtUtc`；旧秒级数据启动时自动乘以 1000，测试页面和 HxPushApp 同步升级。
+- 2026-07-15: 消息时间字段统一为服务端 `MsgDate`：新表和 INSERT 删除重复的 `CreatedAtUtc`，旧库先回填 `MsgDate` 再删除旧列；HTTP 和 WebSocket 均无条件忽略客户端时间并生成严格递增毫秒值，网页及 HxPushApp 发送时不再赋时间。
+- 2026-07-15: 消息分页接口和未读接口增加可选 `hwid` 精确筛选；留空仍查询 AppKey 下全部设备，填写后只返回并标记对应设备的消息，SQLite 同步增加 AppKey/Hwid/IsRead/MsgDate 组合索引，`webapi.html` 增加测试输入。

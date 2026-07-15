@@ -1,5 +1,8 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 
 namespace HxPushServerWeb
 {
@@ -8,12 +11,20 @@ namespace HxPushServerWeb
     {
         private const string DefaultManagerPassword = "123";
         private const int MaxAppKeyLength = 200;
+        private const int MaxRemarkLength = 500;
+
+        // JSON Lines 保留备注，同时继续支持旧版纯 AppKey 文本行。
+        private static readonly JsonSerializerOptions FileJsonOptions = new()
+        {
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            PropertyNameCaseInsensitive = true
+        };
 
         // 文件路径位于程序运行目录的 App_Data 下。
         private readonly string appKeyFilePath;
         private readonly string passwordFilePath;
         private readonly object syncRoot = new();
-        private HashSet<string> appKeys = new(StringComparer.Ordinal);
+        private Dictionary<string, HxPushAppKeyModel> appKeys = new(StringComparer.Ordinal);
 
         // 初始化管理文件并一次性加载 AppKey 缓存。
         public HxPushAppKeyManager(string appKeyFilePath, string passwordFilePath)
@@ -35,31 +46,37 @@ namespace HxPushServerWeb
 
             lock (syncRoot)
             {
-                return appKeys.Contains(appKey.Trim());
+                return appKeys.ContainsKey(appKey.Trim());
             }
         }
 
         // 返回排序后的缓存副本，避免调用方修改内部集合。
-        public IReadOnlyList<string> GetAll()
+        public IReadOnlyList<HxPushAppKeyModel> GetAll()
         {
             lock (syncRoot)
             {
-                return appKeys.OrderBy(value => value, StringComparer.Ordinal).ToArray();
+                return appKeys.Values
+                    .OrderBy(value => value.AppKey, StringComparer.Ordinal)
+                    .Select(Clone)
+                    .ToArray();
             }
         }
 
         // 覆盖持久化 AppKey，并在写入成功后原子替换缓存引用。
-        public void ReplaceAll(IEnumerable<string> values)
+        public void ReplaceAll(IEnumerable<HxPushAppKeyModel> values)
         {
             var normalizedValues = NormalizeAppKeys(values);
-            var fileLines = new[] { "# 一行一个 AppKey，空行和 # 开头的行会被忽略。" }
-                .Concat(normalizedValues)
+            var fileLines = new[] { "# 每行一个 JSON AppKey 记录；旧版纯文本行仍兼容读取。" }
+                .Concat(normalizedValues.Select(value => JsonSerializer.Serialize(value, FileJsonOptions)))
                 .ToArray();
 
             lock (syncRoot)
             {
                 File.WriteAllLines(appKeyFilePath, fileLines, Encoding.UTF8);
-                appKeys = new HashSet<string>(normalizedValues, StringComparer.Ordinal);
+                appKeys = normalizedValues.ToDictionary(
+                    value => value.AppKey,
+                    Clone,
+                    StringComparer.Ordinal);
             }
         }
 
@@ -81,22 +98,57 @@ namespace HxPushServerWeb
         }
 
         // 从文本文件读取并规范化缓存初始值。
-        private HashSet<string> LoadAppKeys()
+        private Dictionary<string, HxPushAppKeyModel> LoadAppKeys()
         {
-            return File.ReadLines(appKeyFilePath, Encoding.UTF8)
-                .Select(line => line.Trim())
-                .Where(line => line.Length > 0 && !line.StartsWith('#'))
-                .ToHashSet(StringComparer.Ordinal);
+            var legacyRemark = GetFileCreationDate();
+            var values = new List<HxPushAppKeyModel>();
+
+            foreach (var rawLine in File.ReadLines(appKeyFilePath, Encoding.UTF8))
+            {
+                var line = rawLine.Trim();
+                if (line.Length == 0 || line.StartsWith('#'))
+                {
+                    continue;
+                }
+
+                HxPushAppKeyModel? value = null;
+                if (line.StartsWith('{'))
+                {
+                    try
+                    {
+                        value = JsonSerializer.Deserialize<HxPushAppKeyModel>(line, FileJsonOptions);
+                    }
+                    catch (JsonException)
+                    {
+                        // 单行损坏不阻止服务启动，其余合法 AppKey 仍可继续使用。
+                    }
+                }
+                else
+                {
+                    // 旧版纯文本 Key 使用文件创建日期作为初始备注。
+                    value = new HxPushAppKeyModel { AppKey = line, Remark = legacyRemark };
+                }
+
+                if (value is not null)
+                {
+                    values.Add(value);
+                }
+            }
+
+            return NormalizeAppKeys(values).ToDictionary(
+                value => value.AppKey,
+                Clone,
+                StringComparer.Ordinal);
         }
 
-        // 去除空行和重复项，同时拒绝会破坏文本文件格式的值。
-        private static string[] NormalizeAppKeys(IEnumerable<string> values)
+        // 去除空值和重复项，同时为缺少备注的新记录补创建日期。
+        private static HxPushAppKeyModel[] NormalizeAppKeys(IEnumerable<HxPushAppKeyModel> values)
         {
-            var result = new HashSet<string>(StringComparer.Ordinal);
+            var result = new Dictionary<string, HxPushAppKeyModel>(StringComparer.Ordinal);
 
             foreach (var value in values)
             {
-                var appKey = value?.Trim();
+                var appKey = value?.AppKey?.Trim();
                 if (string.IsNullOrWhiteSpace(appKey))
                 {
                     continue;
@@ -110,10 +162,44 @@ namespace HxPushServerWeb
                     throw new ArgumentException($"AppKey 格式无效：{appKey}");
                 }
 
-                result.Add(appKey);
+                var remark = value?.Remark?.Trim();
+                if (string.IsNullOrWhiteSpace(remark))
+                {
+                    remark = GetCurrentDate();
+                }
+
+                if (remark.Length > MaxRemarkLength || remark.Contains('\r') || remark.Contains('\n'))
+                {
+                    throw new ArgumentException($"AppKey 备注格式无效：{appKey}");
+                }
+
+                // 重复 Key 以后出现的记录为准，便于编辑后覆盖备注。
+                result[appKey] = new HxPushAppKeyModel { AppKey = appKey, Remark = remark };
             }
 
-            return result.OrderBy(value => value, StringComparer.Ordinal).ToArray();
+            return result.Values
+                .OrderBy(value => value.AppKey, StringComparer.Ordinal)
+                .ToArray();
+        }
+
+        // 复制模型，避免管理接口修改缓存中的实例。
+        private static HxPushAppKeyModel Clone(HxPushAppKeyModel value)
+        {
+            return new HxPushAppKeyModel { AppKey = value.AppKey, Remark = value.Remark };
+        }
+
+        private static string GetCurrentDate()
+        {
+            return DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+
+        // 旧文件没有真实备注时，优先使用文件创建日期。
+        private string GetFileCreationDate()
+        {
+            var creationTime = File.GetCreationTime(appKeyFilePath);
+            return creationTime.Year > 1970
+                ? creationTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                : GetCurrentDate();
         }
 
         // 缺少目录或文件时创建默认 AppKey 和密码配置。
@@ -130,10 +216,18 @@ namespace HxPushServerWeb
             if (!File.Exists(appKeyFilePath))
             {
                 // 提供示例 AppKey，方便首次启动后直接测试。
-                File.WriteAllText(
+                var defaultValue = new HxPushAppKeyModel
+                {
+                    AppKey = "app-demo",
+                    Remark = GetCurrentDate()
+                };
+                File.WriteAllLines(
                     appKeyFilePath,
-                    "# 一行一个 AppKey，空行和 # 开头的行会被忽略。" + Environment.NewLine +
-                    "app-demo" + Environment.NewLine);
+                    [
+                        "# 每行一个 JSON AppKey 记录；旧版纯文本行仍兼容读取。",
+                        JsonSerializer.Serialize(defaultValue, FileJsonOptions)
+                    ],
+                    Encoding.UTF8);
             }
 
             EnsurePasswordFileExists();

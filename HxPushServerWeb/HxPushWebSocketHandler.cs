@@ -12,6 +12,7 @@ namespace HxPushServerWeb
     {
         // 客户端集合允许连接处理与 HTTP 推送并发访问。
         private readonly HxPushAppKeyManager appKeyManager;
+        private readonly HxPushMessageRepository messageRepository;
         private readonly ConcurrentDictionary<Guid, WebSocketClient> clients = new();
 
         // 收发消息共用序列化配置，兼容属性名大小写并保留中文。
@@ -22,9 +23,12 @@ namespace HxPushServerWeb
         };
 
         // 注入 AppKey 白名单管理器。
-        public HxPushWebSocketHandler(HxPushAppKeyManager appKeyManager)
+        public HxPushWebSocketHandler(
+            HxPushAppKeyManager appKeyManager,
+            HxPushMessageRepository messageRepository)
         {
             this.appKeyManager = appKeyManager;
+            this.messageRepository = messageRepository;
         }
 
         // 校验并接受 WebSocket 请求，在连接生命周期内维护客户端登记信息。
@@ -128,9 +132,10 @@ namespace HxPushServerWeb
 
                 if (message is null ||
                     string.IsNullOrWhiteSpace(message.AppKey) ||
-                    string.IsNullOrWhiteSpace(message.Hwid))
+                    string.IsNullOrWhiteSpace(message.Hwid) ||
+                    string.IsNullOrWhiteSpace(message.Msg))
                 {
-                    await CloseAsync(client.WebSocket, WebSocketCloseStatus.InvalidPayloadData, "AppKey and Hwid are required", cancellationToken);
+                    await CloseAsync(client.WebSocket, WebSocketCloseStatus.InvalidPayloadData, "AppKey, Hwid and Msg are required", cancellationToken);
                     break;
                 }
 
@@ -142,10 +147,24 @@ namespace HxPushServerWeb
                     break;
                 }
 
-                // AppKey 已在握手阶段登记，这里只补充设备标识。
+                // 统一连接身份和缺省字段后，转发给同 AppKey 的全部连接。
+                message.AppKey = client.AppKey;
                 client.Hwid = message.Hwid.Trim();
+                message.Hwid = client.Hwid;
 
-                Console.WriteLine($"WebSocket 客户端登记：client={client.Id}, appKey={client.AppKey}, hwid={client.Hwid}");
+                if (string.IsNullOrWhiteSpace(message.ID))
+                {
+                    message.ID = Guid.NewGuid().ToString("N");
+                }
+
+                // 无条件覆盖客户端时间，所有 WS 推送也使用服务端 MsgDate。
+                message.MsgDate = messageRepository.CreateMessageTimestamp();
+
+                // WS 入站消息会立即尝试推送，不进入离线消息表。
+                message.IsRead = true;
+                var pushCount = await SendToAppKeyAsync(message, cancellationToken);
+
+                Console.WriteLine($"WebSocket 消息推送：client={client.Id}, appKey={client.AppKey}, pushed={pushCount}");
             }
         }
 

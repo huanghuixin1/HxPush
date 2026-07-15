@@ -50,6 +50,8 @@ namespace HxPushServerWeb
             app.MapGet("/", (HxPushHttpHandler handler) => handler.HandleIndex());
             app.MapGet("/api/messages", (HttpRequest request, HxPushHttpHandler handler, CancellationToken cancellationToken) =>
                 handler.HandleGetMessagesAsync(request, cancellationToken));
+            app.MapGet("/api/messages/unread", (HttpRequest request, HxPushHttpHandler handler, CancellationToken cancellationToken) =>
+                handler.HandleGetUnreadMessagesAsync(request, cancellationToken));
             app.MapPost("/api/messages", (HttpRequest request, HxPushHttpHandler handler, CancellationToken cancellationToken) =>
                 handler.HandleCreateMessageAsync(request, cancellationToken));
             app.MapGet("/api/appkeys", (HttpRequest request, HxPushHttpHandler handler) =>

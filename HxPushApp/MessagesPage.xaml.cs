@@ -10,14 +10,20 @@ namespace HxPushApp
     public partial class MessagesPage : ContentPage, INotifyPropertyChanged
     {
         const int PageSize = 50;
+        const string AllDevicesFilter = "全部设备";
 
         readonly SemaphoreSlim loadLock = new(1, 1);
         bool hasMoreMessages = true;
         bool isLoadingMore;
+        bool isRefreshing;
+        bool isUpdatingDeviceFilters;
+        bool isDeviceFilterInitialized;
         bool isToastVisible;
         bool hasShownNoMoreToast;
+        string? activeDeviceId;
 
         public ObservableCollection<HxPushMsgModel> Messages { get; } = new();
+        public ObservableCollection<string> DeviceFilters { get; } = new();
 
         public bool IsLoadingMore
         {
@@ -52,29 +58,62 @@ namespace HxPushApp
 
         public MessagesPage()
         {
+            DeviceFilters.Add(AllDevicesFilter);
             InitializeComponent();
             BindingContext = this;
+            DeviceFilterPicker.SelectedIndex = 0;
+            isDeviceFilterInitialized = true;
             Loaded += OnLoaded;
         }
 
         async void OnLoaded(object? sender, EventArgs e)
         {
             Loaded -= OnLoaded;
-            await RefreshMessagesAsync();
+            await RefreshFromUiAsync();
         }
 
         async void OnRefreshing(object? sender, EventArgs e)
         {
+            await RefreshFromUiAsync();
+        }
+
+        async void OnRefreshButtonClicked(object? sender, EventArgs e)
+        {
+            await RefreshFromUiAsync();
+        }
+
+        async void OnDeviceFilterChanged(object? sender, EventArgs e)
+        {
+            if (!isDeviceFilterInitialized || isUpdatingDeviceFilters)
+            {
+                return;
+            }
+
+            await RefreshFromUiAsync();
+        }
+
+        async Task RefreshFromUiAsync()
+        {
+            if (isRefreshing)
+            {
+                return;
+            }
+
+            isRefreshing = true;
+            RefreshMessagesButton.IsEnabled = false;
+            DeviceFilterPicker.IsEnabled = false;
+            MessagesRefreshView.IsRefreshing = true;
+
             try
             {
                 await RefreshMessagesAsync();
             }
             finally
             {
-                if (sender is RefreshView refreshView)
-                {
-                    refreshView.IsRefreshing = false;
-                }
+                MessagesRefreshView.IsRefreshing = false;
+                RefreshMessagesButton.IsEnabled = true;
+                DeviceFilterPicker.IsEnabled = true;
+                isRefreshing = false;
             }
         }
 
@@ -87,8 +126,13 @@ namespace HxPushApp
                 SummaryText = "正在加载消息...";
                 hasShownNoMoreToast = false;
 
-                var recentMessages = await SqliteHelper.Instance.GetRecentMessagesAsync(PageSize);
-                foreach (var message in recentMessages)
+                await UpdateDeviceFiltersAsync();
+                activeDeviceId = GetSelectedDeviceId();
+
+                var recentMessages = await SqliteHelper.Instance.GetRecentMessagesAsync(
+                    PageSize,
+                    activeDeviceId);
+                foreach (var message in OrderMessagesDescending(recentMessages))
                 {
                     Messages.Add(message);
                 }
@@ -140,9 +184,10 @@ namespace HxPushApp
                 var olderMessages = await SqliteHelper.Instance.GetMessagesBeforeAsync(
                     lastMessage.MsgDate,
                     lastMessage.ID,
-                    PageSize);
+                    PageSize,
+                    activeDeviceId);
 
-                foreach (var message in olderMessages)
+                foreach (var message in OrderMessagesDescending(olderMessages))
                 {
                     Messages.Add(message);
                 }
@@ -164,6 +209,48 @@ namespace HxPushApp
                 IsLoadingMore = false;
                 loadLock.Release();
             }
+        }
+
+        async Task UpdateDeviceFiltersAsync()
+        {
+            var selectedFilter = DeviceFilterPicker.SelectedItem as string ?? AllDevicesFilter;
+            var deviceIds = await SqliteHelper.Instance.GetDeviceIdsAsync();
+
+            isUpdatingDeviceFilters = true;
+            try
+            {
+                DeviceFilters.Clear();
+                DeviceFilters.Add(AllDevicesFilter);
+
+                foreach (var deviceId in deviceIds)
+                {
+                    DeviceFilters.Add(deviceId);
+                }
+
+                DeviceFilterPicker.SelectedItem = DeviceFilters.Contains(selectedFilter)
+                    ? selectedFilter
+                    : AllDevicesFilter;
+            }
+            finally
+            {
+                isUpdatingDeviceFilters = false;
+            }
+        }
+
+        string? GetSelectedDeviceId()
+        {
+            var selectedFilter = DeviceFilterPicker.SelectedItem as string;
+            return string.IsNullOrWhiteSpace(selectedFilter) || selectedFilter == AllDevicesFilter
+                ? null
+                : selectedFilter;
+        }
+
+        static IOrderedEnumerable<HxPushMsgModel> OrderMessagesDescending(
+            IEnumerable<HxPushMsgModel> messages)
+        {
+            return messages
+                .OrderByDescending(message => message.MsgDate)
+                .ThenByDescending(message => message.ID, StringComparer.Ordinal);
         }
 
         async Task ShowNoMoreDataToastAsync()

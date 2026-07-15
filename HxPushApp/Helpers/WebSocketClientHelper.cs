@@ -9,7 +9,6 @@ namespace HxPushApp.Helpers
     /// </summary>
     public sealed class WebSocketClientHelper : IAsyncDisposable
     {
-        private readonly Uri serverUri;
         private readonly TimeSpan operationTimeout;
         private readonly SemaphoreSlim sendLock = new(1, 1);
 
@@ -17,15 +16,14 @@ namespace HxPushApp.Helpers
         private CancellationTokenSource? receiveCts;
         private Task? receiveTask;
         private string? connectedAppKey;
+        private Uri? connectedServerUri;
 
         /// <summary>
         /// 创建 WebSocket 客户端帮助类。
         /// </summary>
-        /// <param name="serverUri">WebSocket 服务地址。</param>
         /// <param name="operationTimeout">连接和发送的超时时间，默认 10 秒。</param>
-        public WebSocketClientHelper(Uri serverUri, TimeSpan? operationTimeout = null)
+        public WebSocketClientHelper(TimeSpan? operationTimeout = null)
         {
-            this.serverUri = serverUri;
             this.operationTimeout = operationTimeout ?? TimeSpan.FromSeconds(10);
         }
 
@@ -55,21 +53,30 @@ namespace HxPushApp.Helpers
         public bool IsConnected => webSocket?.State == WebSocketState.Open;
 
         /// <summary>
-        /// 使用 AppKey 连接 WebSocket 服务；连接成功后会自动启动后台接收循环。
+        /// 使用指定服务器地址和 AppKey 连接 WebSocket 服务；连接成功后会自动启动后台接收循环。
         /// </summary>
+        /// <param name="serverUri">WebSocket 服务地址。</param>
         /// <param name="appKey">用于服务端握手校验的 AppKey。</param>
         /// <param name="cancellationToken">取消连接操作的令牌。</param>
         public async Task ConnectAsync(
+            Uri serverUri,
             string appKey,
             CancellationToken cancellationToken = default)
         {
+            if (serverUri.Scheme is not ("ws" or "wss"))
+            {
+                throw new ArgumentException("服务器地址必须使用 ws 或 wss 协议。", nameof(serverUri));
+            }
+
             var normalizedAppKey = appKey?.Trim();
             if (string.IsNullOrWhiteSpace(normalizedAppKey))
             {
                 throw new ArgumentException("AppKey 不能为空。", nameof(appKey));
             }
 
-            if (IsConnected && string.Equals(connectedAppKey, normalizedAppKey, StringComparison.Ordinal))
+            if (IsConnected &&
+                connectedServerUri == serverUri &&
+                string.Equals(connectedAppKey, normalizedAppKey, StringComparison.Ordinal))
             {
                 return;
             }
@@ -78,7 +85,7 @@ namespace HxPushApp.Helpers
             await DisconnectAsync();
 
             var socket = new ClientWebSocket();
-            var connectionUri = BuildConnectionUri(normalizedAppKey);
+            var connectionUri = BuildConnectionUri(serverUri, normalizedAppKey);
             try
             {
                 using var timeout = CreateOperationTimeout(cancellationToken);
@@ -86,6 +93,7 @@ namespace HxPushApp.Helpers
 
                 webSocket = socket;
                 connectedAppKey = normalizedAppKey;
+                connectedServerUri = serverUri;
                 receiveCts = new CancellationTokenSource();
 
                 RaiseConnectionStateChanged(isConnected: true);
@@ -102,6 +110,7 @@ namespace HxPushApp.Helpers
             {
                 socket.Dispose();
                 connectedAppKey = null;
+                connectedServerUri = null;
                 RaiseConnectionStateChanged(isConnected: false);
                 throw;
             }
@@ -152,6 +161,7 @@ namespace HxPushApp.Helpers
             receiveCts = null;
             receiveTask = null;
             connectedAppKey = null;
+            connectedServerUri = null;
 
             try
             {
@@ -276,7 +286,7 @@ namespace HxPushApp.Helpers
         /// <summary>
         /// 在基础地址上追加经过 URL 编码的 AppKey 查询参数。
         /// </summary>
-        private Uri BuildConnectionUri(string appKey)
+        private static Uri BuildConnectionUri(Uri serverUri, string appKey)
         {
             var separator = string.IsNullOrEmpty(serverUri.Query) ? "?" : "&";
             return new Uri($"{serverUri}{separator}appkey={Uri.EscapeDataString(appKey)}");
