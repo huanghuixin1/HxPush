@@ -2,58 +2,88 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="HxPushApp.MessagesPage"
-             Title="消息列表">
+             Title="消息列表"
+             Background="{StaticResource PageGradientBrush}">
 
     <Grid RowDefinitions="Auto,Auto,*"
-          Padding="20,18"
-          RowSpacing="14">
+          Padding="18,16"
+          RowSpacing="12">
 
-        <Grid
-            ColumnDefinitions="*,Auto"
-            ColumnSpacing="12">
-            <VerticalStackLayout Spacing="4">
-                <Label
-                    Text="{Binding SummaryText}"
-                    FontSize="14"
-                    TextColor="{AppThemeBinding Light=#666666, Dark=#B8B8B8}" />
+        <Border
+            Padding="18,16"
+            StrokeThickness="0"
+            Background="{StaticResource PrimaryGradientBrush}">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="22" />
+            </Border.StrokeShape>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <VerticalStackLayout Spacing="5">
+                    <Label
+                        Text="消息中心"
+                        FontSize="26"
+                        FontAttributes="Bold"
+                        TextColor="White" />
+                    <Label
+                        Text="{Binding SummaryText}"
+                        FontSize="13"
+                        TextColor="#DBEAFE" />
+                    <Border
+                        Padding="9,4"
+                        HorizontalOptions="Start"
+                        StrokeThickness="0"
+                        BackgroundColor="#E0F2FE">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="12" />
+                        </Border.StrokeShape>
+                        <Label
+                            x:Name="WebSocketConnectionStatusLabel"
+                            FontSize="12"
+                            FontAttributes="Bold" />
+                    </Border>
+                </VerticalStackLayout>
 
-                <Label
-                    x:Name="WebSocketConnectionStatusLabel"
-                    FontSize="13" />
-            </VerticalStackLayout>
+                <Button
+                    x:Name="RefreshMessagesButton"
+                    Grid.Column="1"
+                    Text="↻"
+                    FontSize="24"
+                    TextColor="White"
+                    BackgroundColor="#FFFFFF33"
+                    Padding="0"
+                    WidthRequest="46"
+                    HeightRequest="46"
+                    IsVisible="{OnPlatform WinUI=True, Default=False}"
+                    ToolTipProperties.Text="刷新消息"
+                    SemanticProperties.Description="刷新消息"
+                    Clicked="OnRefreshButtonClicked"
+                    VerticalOptions="Center" />
+            </Grid>
+        </Border>
 
-            <Button
-                x:Name="RefreshMessagesButton"
-                Grid.Column="1"
-                Text="↻"
-                FontSize="24"
-                Padding="0"
-                WidthRequest="44"
-                HeightRequest="44"
-                IsVisible="{OnPlatform WinUI=True, Default=False}"
-                ToolTipProperties.Text="刷新消息"
-                SemanticProperties.Description="刷新消息"
-                Clicked="OnRefreshButtonClicked"
-                VerticalOptions="Center" />
-        </Grid>
-
-        <Grid
+        <Border
             Grid.Row="1"
-            ColumnDefinitions="Auto,*"
-            ColumnSpacing="10">
-            <Label
-                Text="设备"
-                FontSize="14"
-                VerticalOptions="Center"
-                TextColor="{AppThemeBinding Light=#666666, Dark=#B8B8B8}" />
-
-            <Picker
-                x:Name="DeviceFilterPicker"
-                Grid.Column="1"
-                Title="选择设备"
-                ItemsSource="{Binding DeviceFilters}"
-                SelectedIndexChanged="OnDeviceFilterChanged" />
-        </Grid>
+            Padding="14,5"
+            Stroke="#CFE0FF"
+            StrokeThickness="1"
+            BackgroundColor="#FFFFFFCC">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="16" />
+            </Border.StrokeShape>
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                <Label
+                    Text="设备筛选"
+                    FontSize="13"
+                    FontAttributes="Bold"
+                    VerticalOptions="Center"
+                    TextColor="#2563EB" />
+                <Picker
+                    x:Name="DeviceFilterPicker"
+                    Grid.Column="1"
+                    Title="选择设备"
+                    ItemsSource="{Binding DeviceFilters}"
+                    SelectedIndexChanged="OnDeviceFilterChanged" />
+            </Grid>
+        </Border>
 
         <RefreshView
             x:Name="MessagesRefreshView"
@@ -61,23 +91,34 @@
             Refreshing="OnRefreshing">
             <CollectionView
                 x:Name="MessagesCollectionView"
+                Margin="0,2"
                 ItemsSource="{Binding Messages}"
                 SelectionMode="Single"
                 SelectionChanged="OnMessageSelected"
                 Scrolled="OnMessagesScrolled">
                 <CollectionView.EmptyView>
                     <VerticalStackLayout
-                        Padding="0,60"
+                        Padding="0,72"
                         HorizontalOptions="Center"
-                        Spacing="8">
+                        Spacing="10">
+                        <Border
+                            Padding="18"
+                            StrokeThickness="0"
+                            BackgroundColor="#DBEAFE">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="20" />
+                            </Border.StrokeShape>
+                            <Label
+                                Text="暂无消息"
+                                FontSize="18"
+                                FontAttributes="Bold"
+                                TextColor="#1D4ED8"
+                                HorizontalTextAlignment="Center" />
+                        </Border>
                         <Label
-                            Text="暂无消息"
-                            FontSize="18"
-                            HorizontalTextAlignment="Center" />
-                        <Label
-                            Text="下拉可从服务端同步消息"
+                            Text="下拉可从服务器同步最新消息"
                             FontSize="14"
-                            TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}"
+                            TextColor="#64748B"
                             HorizontalTextAlignment="Center" />
                     </VerticalStackLayout>
                 </CollectionView.EmptyView>
@@ -86,24 +127,24 @@
                     <DataTemplate>
                         <Border
                             Margin="0,0,0,10"
-                            Padding="14"
-                            MaximumHeightRequest="112"
-                            Stroke="{AppThemeBinding Light=#E4E4E4, Dark=#3A3A3A}"
+                            Padding="16,14"
+                            MaximumHeightRequest="118"
+                            Stroke="#D7E6FF"
                             StrokeThickness="1"
-                            BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#242424}">
+                            BackgroundColor="#FFFFFFF2">
                             <Border.StrokeShape>
-                                <RoundRectangle CornerRadius="8" />
+                                <RoundRectangle CornerRadius="18" />
                             </Border.StrokeShape>
+                            <Border.Shadow>
+                                <Shadow Brush="#1A2563EB" Offset="0,4" Radius="12" Opacity="0.12" />
+                            </Border.Shadow>
 
-                            <Grid
-                                ColumnDefinitions="*"
-                                RowDefinitions="Auto,Auto"
-                                ColumnSpacing="12"
-                                RowSpacing="8">
+                            <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
                                 <Label
                                     Text="{Binding Msg}"
                                     FontSize="17"
                                     FontAttributes="Bold"
+                                    TextColor="#172554"
                                     MaxLines="2"
                                     LineBreakMode="TailTruncation" />
 
@@ -111,24 +152,31 @@
                                     Grid.Row="1"
                                     ColumnDefinitions="Auto,*,Auto"
                                     ColumnSpacing="8">
-                                    <Label
-                                        Text="设备"
-                                        FontSize="13"
-                                        BackgroundColor="AntiqueWhite"
-                                        TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}" />
+                                    <Border
+                                        Padding="8,3"
+                                        StrokeThickness="0"
+                                        BackgroundColor="#E0EFFF">
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="8" />
+                                        </Border.StrokeShape>
+                                        <Label
+                                            Text="设备"
+                                            FontSize="12"
+                                            TextColor="#2563EB" />
+                                    </Border>
 
                                     <Label
                                         Grid.Column="1"
                                         Text="{Binding Hwid}"
                                         FontSize="13"
                                         LineBreakMode="TailTruncation"
-                                        TextColor="{AppThemeBinding Light=#444444, Dark=#DDDDDD}" />
+                                        TextColor="#475569" />
 
                                     <Label
                                         Grid.Column="2"
                                         Text="{Binding MsgDate, Converter={StaticResource UnixTimestampToTimeConverter}}"
-                                        FontSize="13"
-                                        TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}" />
+                                        FontSize="12"
+                                        TextColor="#64748B" />
                                 </Grid>
                             </Grid>
                         </Border>
@@ -136,9 +184,7 @@
                 </CollectionView.ItemTemplate>
 
                 <CollectionView.Footer>
-                    <Grid
-                        HeightRequest="44"
-                        IsVisible="{Binding IsLoadingMore}">
+                    <Grid HeightRequest="52" IsVisible="{Binding IsLoadingMore}">
                         <HorizontalStackLayout
                             Spacing="8"
                             HorizontalOptions="Center"
@@ -147,8 +193,8 @@
                             <Label
                                 Text="正在加载更多..."
                                 FontSize="13"
-                                VerticalOptions="Center"
-                                TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}" />
+                                TextColor="#64748B"
+                                VerticalOptions="Center" />
                         </HorizontalStackLayout>
                     </Grid>
                 </CollectionView.Footer>
@@ -158,24 +204,27 @@
         <Border
             x:Name="LatestMessagesNotice"
             Grid.Row="2"
-            Margin="0,12"
-            Padding="14,8"
+            Margin="0,14"
+            Padding="16,9"
             IsVisible="False"
             HorizontalOptions="Center"
             VerticalOptions="Start"
             ZIndex="100"
             StrokeThickness="0"
-            BackgroundColor="#CC2563EB">
+            Background="{StaticResource PrimaryGradientBrush}">
             <Border.StrokeShape>
-                <RoundRectangle CornerRadius="16" />
+                <RoundRectangle CornerRadius="18" />
             </Border.StrokeShape>
-            <Label
-                Text="有最新消息"
-                FontSize="14"
-                TextColor="White" />
+            <Border.Shadow>
+                <Shadow Brush="#402563EB" Offset="0,6" Radius="12" Opacity="0.28" />
+            </Border.Shadow>
             <Border.GestureRecognizers>
                 <TapGestureRecognizer Tapped="OnLatestMessagesNoticeTapped" />
             </Border.GestureRecognizers>
+            <HorizontalStackLayout Spacing="6">
+                <Label Text="有最新消息" FontSize="14" FontAttributes="Bold" TextColor="White" />
+                <Label Text="点击查看" FontSize="12" TextColor="#DBEAFE" />
+            </HorizontalStackLayout>
         </Border>
 
         <Border
@@ -189,14 +238,11 @@
             HorizontalOptions="Center"
             VerticalOptions="End"
             StrokeThickness="0"
-            BackgroundColor="#CC222222">
+            BackgroundColor="#0F172ACC">
             <Border.StrokeShape>
                 <RoundRectangle CornerRadius="18" />
             </Border.StrokeShape>
-            <Label
-                Text="没有新的数据"
-                FontSize="14"
-                TextColor="White" />
+            <Label Text="没有更多数据" FontSize="14" TextColor="White" />
         </Border>
 
         <Border
@@ -206,21 +252,13 @@
             HorizontalOptions="Center"
             VerticalOptions="Center"
             StrokeThickness="0"
-            BackgroundColor="#DD222222">
+            Background="{StaticResource PrimaryGradientBrush}">
             <Border.StrokeShape>
-                <RoundRectangle CornerRadius="14" />
+                <RoundRectangle CornerRadius="16" />
             </Border.StrokeShape>
-
             <HorizontalStackLayout Spacing="12">
-                <ActivityIndicator
-                    IsRunning="{Binding IsServerRequesting}"
-                    Color="White"
-                    VerticalOptions="Center" />
-                <Label
-                    Text="{Binding LoadingText}"
-                    FontSize="14"
-                    TextColor="White"
-                    VerticalOptions="Center" />
+                <ActivityIndicator IsRunning="{Binding IsServerRequesting}" Color="White" VerticalOptions="Center" />
+                <Label Text="{Binding LoadingText}" FontSize="14" TextColor="White" VerticalOptions="Center" />
             </HorizontalStackLayout>
         </Border>
     </Grid>

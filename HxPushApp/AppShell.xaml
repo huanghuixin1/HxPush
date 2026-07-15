@@ -5,10 +5,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:local="clr-namespace:HxPushApp"
     Title="彗星消息推送"
-    Shell.TabBarBackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#1F1F1F}"
-    Shell.TabBarForegroundColor="#512BD4"
-    Shell.TabBarTitleColor="#512BD4"
-    Shell.TabBarUnselectedColor="#777777">
+    Shell.TabBarBackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#172033}"
+    Shell.TabBarForegroundColor="#2563EB"
+    Shell.TabBarTitleColor="#2563EB"
+    Shell.TabBarUnselectedColor="#64748B">
 
     <TabBar>
         <ShellContent

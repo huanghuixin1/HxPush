@@ -2,27 +2,51 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="HxPushApp.MainPage"
-             Title="首页">
+             Title="首页"
+             Background="{StaticResource PageGradientBrush}">
 
     <ScrollView>
-        <VerticalStackLayout
-            Padding="24"
-            Spacing="16">
+        <VerticalStackLayout Padding="20,24" Spacing="18">
+            <Border Padding="24" StrokeThickness="0" Background="{StaticResource PrimaryGradientBrush}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="24" />
+                </Border.StrokeShape>
+                <Border.Shadow>
+                    <Shadow Brush="#402563EB" Offset="0,8" Radius="18" Opacity="0.25" />
+                </Border.Shadow>
+                <VerticalStackLayout Spacing="8">
+                    <Label
+                        Text="彗星推送"
+                        FontSize="30"
+                        FontAttributes="Bold"
+                        TextColor="White" />
+                    <Label
+                        Text="让重要消息，更快抵达"
+                        FontSize="16"
+                        TextColor="#DBEAFE" />
+                </VerticalStackLayout>
+            </Border>
 
-            <Label
-                Text="这里是首页"
-                FontSize="28"
-                FontAttributes="Bold" />
-
-            <Label
-                Text="点击下方按钮可以直接切换到消息列表。"
-                FontSize="16" />
-
-            <Button
-                Text="进入消息"
-                Clicked="OnViewMessagesClicked"
-                HorizontalOptions="Fill" />
+            <Border Padding="20" Stroke="#D7E6FF" StrokeThickness="1" BackgroundColor="#FFFFFFD9">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="20" />
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="14">
+                    <Label
+                        Text="消息动态"
+                        FontSize="20"
+                        FontAttributes="Bold"
+                        TextColor="#172554" />
+                    <Label
+                        Text="查看来自服务器的最新推送，并按设备快速筛选。"
+                        FontSize="15"
+                        TextColor="#64748B" />
+                    <Button
+                        Text="进入消息中心"
+                        Clicked="OnViewMessagesClicked"
+                        HorizontalOptions="Fill" />
+                </VerticalStackLayout>
+            </Border>
         </VerticalStackLayout>
     </ScrollView>
-
 </ContentPage>
