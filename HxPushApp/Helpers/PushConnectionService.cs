@@ -38,6 +38,11 @@ namespace HxPushApp.Helpers
 
         public event EventHandler<bool>? ConnectionStateChanged;
 
+        /// <summary>
+        /// Raised after received push messages have been saved to the local database.
+        /// </summary>
+        public event EventHandler<IReadOnlyList<HxPushMsgModel>>? PushMessagesReceived;
+
         public bool IsConnected => webSocketClient.IsConnected;
 
         /// <summary>
@@ -99,6 +104,7 @@ namespace HxPushApp.Helpers
             try
             {
                 await sqliteHelper.SaveMessagesAsync(pushMessages);
+                PushMessagesReceived?.Invoke(this, pushMessages);
                 RaiseLogMessage($"已保存消息：{pushMessages.Count} 条");
             }
             catch (Exception ex)

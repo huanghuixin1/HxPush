@@ -19,7 +19,7 @@
 - `Helpers/AppSettings.cs`：基于 MAUI `Preferences` 集中管理 AppKey 等非敏感本地键值配置。
 - `Helpers/PushConnectionService.cs`：应用级单例 WebSocket 连接，负责启动连接、持续接收并将推送写入 SQLite。
 - `Helpers/HttpClientHelper.cs`：应用级 HTTP 客户端，复用连接并统一处理 GET、POST JSON、自定义请求、取消和错误响应。
-- `Converters/UnixTimestampToTimeConverter.cs`：将消息秒级 Unix 时间戳统一显示为设备本地日期时间 `yyyy-MM-dd HH:mm:ss`。
+- `Converters/UnixTimestampToTimeConverter.cs`：将服务端 UTC Unix 毫秒时间戳转换为设备本地时间；今天显示“今天 HH:mm:ss”，1 到 30 天内显示“N天前 HH:mm:ss”，更早显示 `yyyy-MM-dd HH:mm:ss`。
 
 ## 已知问题
 
@@ -30,7 +30,6 @@
 - 2026-07-13：新增消息详情页；点击消息列表 item 会打开详情页显示完整内容。消息列表 item 增加高度限制，内容最多显示 2 行，超出用省略号截断。
 - 2026-07-13：将解决方案重命名为 `HxPush`，并把项目文件夹/项目名改为 `HxPushApp`；同步更新命名空间、XAML `x:Class`、Windows manifest 和项目标识。 
 - 2026-07-13：将 `HxPushApp` 配置为 Android-only；移除 iOS、MacCatalyst、Windows 目标框架和 Windows 设计器用户配置残留，平台文件夹暂保留但不参与目标框架编译。
-- 2026-07-14：设置页新增 WebSocket 通信测试按钮，连接 `ws://192.168.31.119:5212/ws`，发送测试文本并显示服务端响应。
 - 2026-07-14：为界面设计预览恢复 Windows 目标框架 `net10.0-windows10.0.19041.0`，可用 Visual Studio 的 XAML Live Preview / Hot Reload 减少 Android 反复部署；新增 `DESIGN_PREVIEW.md` 记录使用方式。
 - 2026-07-14：完善设置页 WebSocket 逻辑；连接后启动独立接收任务持续读取服务端消息，支持分片文本/二进制提示、页面离开时取消并关闭连接，发送按钮会复用现有连接。
 - 2026-07-14：修复设置页 WebSocket 日志区域无法滚动；外层布局从 `VerticalStackLayout` 改为行高受控的 `Grid`，日志 `ScrollView` 占剩余空间并在追加消息后自动滚到底。
@@ -62,3 +61,9 @@
 - 2026-07-15：修复 Android manifest 图标引用，将 `@mipmap/appicon` 对齐为当前 MAUI 图标资源 `@mipmap/iconhx`，恢复 Android 构建通过。
 - 2026-07-15：优化消息页服务端同步体验；`HxPushMessageApiClient` 为消息拉取增加 10 秒超时，`HttpClientHelper.GetJsonAsync` 改为先读取完整文本再反序列化，避免部分平台卡在响应流读取；消息页将远端拉取和 SQLite 写入放到后台任务，并新增同步中的 loading 遮罩与超时提示。
 - 2026-07-15：Android 已有 `INTERNET` 权限；为解决 `http://` / `ws://` 明文服务地址刷新时报 `connection failure`，新增 `Platforms/Android/Resources/xml/network_security_config.xml`，仅对白名单服务器 `192.168.31.119`、`43.142.82.217`、`push.huixingfifa.top` 放行明文流量，并在 manifest 中引用。
+- 2026-07-15：按调试便利需求将 Android 明文网络配置改为全局允许所有 `http://` / `ws://` 访问，同时保留 `INTERNET` 权限；消息时间显示改为先按设备本地时区转换服务端 UTC 毫秒时间戳，再按今天、N 天前、超过 30 天显示年月日的规则格式化。
+- 2026-07-15：`PushConnectionService` 在 WebSocket 推送成功写入 SQLite 后发布消息事件；消息页订阅该事件并在主线程按 `MsgDate + ID` 倒序、去重插入当前列表，使已打开的列表即时显示新推送并补充新的设备筛选项。
+- 2026-07-15：消息页新增“有最新消息”浮层提示；用户不在列表顶部时收到并插入实时推送会显示该提示，滚动至第一条消息或手动刷新时自动隐藏。
+- 2026-07-15：为消息页“有最新消息”浮层设置显式高 `ZIndex`，确保它覆盖原生 `RefreshView`/`CollectionView` 的滚动内容，不会被列表遮挡。
+- 2026-07-15：最新消息提示改为只要 WebSocket 成功接收并保存任意推送就显示，不再受当前设备筛选、消息是否新增或列表滚动位置限制；用户滚动到顶部后仍会隐藏。
+- 2026-07-15：消息页“有最新消息”浮层支持点击，点击后平滑回到消息列表顶部并隐藏提示；页面订阅应用级 WebSocket 连接状态事件，顶部状态标签实时显示已连接或“已断开与服务器的连接”。

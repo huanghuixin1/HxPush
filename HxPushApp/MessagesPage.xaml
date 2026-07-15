@@ -2,7 +2,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="HxPushApp.MessagesPage"
-             Title="消息">
+             Title="消息列表">
 
     <Grid RowDefinitions="Auto,Auto,*"
           Padding="20,18"
@@ -13,14 +13,13 @@
             ColumnSpacing="12">
             <VerticalStackLayout Spacing="4">
                 <Label
-                    Text="消息列表"
-                    FontSize="28"
-                    FontAttributes="Bold" />
-
-                <Label
                     Text="{Binding SummaryText}"
                     FontSize="14"
                     TextColor="{AppThemeBinding Light=#666666, Dark=#B8B8B8}" />
+
+                <Label
+                    x:Name="WebSocketConnectionStatusLabel"
+                    FontSize="13" />
             </VerticalStackLayout>
 
             <Button
@@ -61,6 +60,7 @@
             Grid.Row="2"
             Refreshing="OnRefreshing">
             <CollectionView
+                x:Name="MessagesCollectionView"
                 ItemsSource="{Binding Messages}"
                 SelectionMode="Single"
                 SelectionChanged="OnMessageSelected"
@@ -154,6 +154,29 @@
                 </CollectionView.Footer>
             </CollectionView>
         </RefreshView>
+
+        <Border
+            x:Name="LatestMessagesNotice"
+            Grid.Row="2"
+            Margin="0,12"
+            Padding="14,8"
+            IsVisible="False"
+            HorizontalOptions="Center"
+            VerticalOptions="Start"
+            ZIndex="100"
+            StrokeThickness="0"
+            BackgroundColor="#CC2563EB">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="16" />
+            </Border.StrokeShape>
+            <Label
+                Text="有最新消息"
+                FontSize="14"
+                TextColor="White" />
+            <Border.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnLatestMessagesNoticeTapped" />
+            </Border.GestureRecognizers>
+        </Border>
 
         <Border
             x:Name="NoMoreDataToast"

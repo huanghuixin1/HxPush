@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <!--
-        仅允许当前设置页内置服务器使用 http/ws 明文连接。
-        如果后续新增 ws:// 或 http:// 地址，需要在这里同步增加对应 host。
+        允许所有 http/ws 明文连接，便于测试不同服务器地址。
+        生产环境建议优先使用 https/wss，再收紧这里的配置。
     -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">192.168.31.119</domain>
-        <domain includeSubdomains="false">43.142.82.217</domain>
-        <domain includeSubdomains="false">push.huixingfifa.top</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

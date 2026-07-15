@@ -14,6 +14,7 @@ namespace HxPushApp
 
         private readonly SemaphoreSlim loadLock = new(1, 1);
         private readonly HxPushMessageApiClient messageApiClient = HxPushMessageApiClient.Instance;
+        private readonly PushConnectionService pushConnectionService = PushConnectionService.Instance;
 
         private bool hasMoreMessages = true;
         private bool hasReachedRemoteEnd;
@@ -22,6 +23,7 @@ namespace HxPushApp
         private bool isServerRequesting;
         private bool isUpdatingDeviceFilters;
         private bool isDeviceFilterInitialized;
+        private bool isListAtTop = true;
         private bool isToastVisible;
         private bool hasShownNoMoreToast;
         private string? activeDeviceId;
@@ -64,6 +66,9 @@ namespace HxPushApp
             BindingContext = this;
             DeviceFilterPicker.SelectedIndex = 0;
             isDeviceFilterInitialized = true;
+            pushConnectionService.PushMessagesReceived += OnPushMessagesReceived;
+            pushConnectionService.ConnectionStateChanged += OnConnectionStateChanged;
+            UpdateConnectionStatus(pushConnectionService.IsConnected);
             Loaded += OnLoaded;
         }
 
@@ -124,6 +129,8 @@ namespace HxPushApp
             try
             {
                 Messages.Clear();
+                isListAtTop = true;
+                LatestMessagesNotice.IsVisible = false;
                 SummaryText = "正在加载消息...";
                 hasShownNoMoreToast = false;
                 hasReachedRemoteEnd = false;
@@ -161,6 +168,12 @@ namespace HxPushApp
 
         private async void OnMessagesScrolled(object? sender, ItemsViewScrolledEventArgs e)
         {
+            isListAtTop = e.FirstVisibleItemIndex <= 0;
+            if (isListAtTop)
+            {
+                LatestMessagesNotice.IsVisible = false;
+            }
+
             if (e.VerticalDelta <= 0 ||
                 Messages.Count == 0 ||
                 e.LastVisibleItemIndex < Messages.Count - 1)
@@ -169,6 +182,35 @@ namespace HxPushApp
             }
 
             await LoadMoreMessagesAsync();
+        }
+
+        private void OnLatestMessagesNoticeTapped(object? sender, TappedEventArgs e)
+        {
+            if (Messages.Count > 0)
+            {
+                MessagesCollectionView.ScrollTo(
+                    0,
+                    position: ScrollToPosition.Start,
+                    animate: true);
+            }
+
+            isListAtTop = true;
+            LatestMessagesNotice.IsVisible = false;
+        }
+
+        private void OnConnectionStateChanged(object? sender, bool isConnected)
+        {
+            MainThread.BeginInvokeOnMainThread(() => UpdateConnectionStatus(isConnected));
+        }
+
+        private void UpdateConnectionStatus(bool isConnected)
+        {
+            WebSocketConnectionStatusLabel.Text = isConnected
+                ? "已连接到服务器"
+                : "已断开与服务器的连接";
+            WebSocketConnectionStatusLabel.TextColor = isConnected
+                ? Colors.ForestGreen
+                : Colors.IndianRed;
         }
 
         private async Task LoadMoreMessagesAsync()
@@ -331,25 +373,91 @@ namespace HxPushApp
                 : selectedFilter;
         }
 
+        private void OnPushMessagesReceived(
+            object? sender,
+            IReadOnlyList<HxPushMsgModel> pushMessages)
+        {
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                // Any successfully persisted WebSocket push should notify the user,
+                // even when it does not match the currently selected device filter.
+                LatestMessagesNotice.IsVisible = true;
+
+                foreach (var message in pushMessages)
+                {
+                    if (!DeviceFilters.Contains(message.Hwid))
+                    {
+                        DeviceFilters.Add(message.Hwid);
+                    }
+                }
+
+                var selectedDeviceId = GetSelectedDeviceId();
+                var messagesForSelectedDevice = pushMessages.Where(message =>
+                    string.IsNullOrWhiteSpace(selectedDeviceId) ||
+                    string.Equals(message.Hwid, selectedDeviceId, StringComparison.Ordinal));
+
+                var addedCount = AddMessages(messagesForSelectedDevice);
+                if (addedCount == 0)
+                {
+                    return;
+                }
+
+                UpdateSummary();
+            });
+        }
+
         private int AddMessages(IEnumerable<HxPushMsgModel> messages)
         {
-            var messageIds = Messages
-                .Select(message => message.ID)
-                .ToHashSet(StringComparer.Ordinal);
             var appendedCount = 0;
 
             foreach (var message in OrderMessagesDescending(messages))
             {
-                if (!messageIds.Add(message.ID))
+                var existingIndex = FindMessageIndex(message.ID);
+                if (existingIndex >= 0)
                 {
+                    Messages.RemoveAt(existingIndex);
+                    Messages.Insert(FindInsertIndex(message), message);
                     continue;
                 }
 
-                Messages.Add(message);
+                Messages.Insert(FindInsertIndex(message), message);
                 appendedCount++;
             }
 
             return appendedCount;
+        }
+
+        private int FindMessageIndex(string messageId)
+        {
+            for (var index = 0; index < Messages.Count; index++)
+            {
+                if (string.Equals(Messages[index].ID, messageId, StringComparison.Ordinal))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+
+        private int FindInsertIndex(HxPushMsgModel message)
+        {
+            for (var index = 0; index < Messages.Count; index++)
+            {
+                var existingMessage = Messages[index];
+                var isOlderThanExisting = message.MsgDate < existingMessage.MsgDate ||
+                    (message.MsgDate == existingMessage.MsgDate &&
+                     string.Compare(message.ID, existingMessage.ID, StringComparison.Ordinal) < 0);
+
+                if (isOlderThanExisting)
+                {
+                    continue;
+                }
+
+                return index;
+            }
+
+            return Messages.Count;
         }
 
         private void UpdateSummary()
