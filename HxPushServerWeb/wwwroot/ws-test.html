@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HxPush 接口测试台</title>
   <style>
+    /* 页面主题和基础盒模型。 */
     :root {
       color-scheme: light;
       font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
@@ -22,6 +23,7 @@
       background: #eef3f8;
     }
 
+    /* 双栏测试台主布局。 */
     main {
       width: min(1180px, calc(100vw - 32px));
       margin: 0 auto;
@@ -37,7 +39,8 @@
     }
 
     h1,
-    h2 {
+    h2,
+    h3 {
       margin: 0;
       line-height: 1.2;
     }
@@ -51,12 +54,20 @@
       font-size: 18px;
     }
 
+    h3 {
+      margin: 18px 0 12px;
+      padding-top: 16px;
+      border-top: 1px solid #d8e0ed;
+      font-size: 15px;
+    }
+
     label {
       display: block;
       margin-bottom: 6px;
       font-weight: 600;
     }
 
+    /* 表单控件使用统一的尺寸和交互样式。 */
     input,
     textarea,
     button,
@@ -118,6 +129,7 @@
       opacity: 0.5;
     }
 
+    /* 面板和表单网格在窄屏下会自动变为单列。 */
     .grid {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -151,6 +163,12 @@
       gap: 10px;
     }
 
+    .three {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 10px;
+    }
+
     .actions {
       display: flex;
       flex-wrap: wrap;
@@ -166,6 +184,7 @@
       font-weight: 600;
     }
 
+    /* 状态点通过附加类区分连接和错误状态。 */
     .dot {
       width: 10px;
       height: 10px;
@@ -195,6 +214,7 @@
       font-size: 13px;
     }
 
+    /* WebSocket 日志固定高度并保持等宽文本。 */
     .log {
       height: 260px;
       overflow: auto;
@@ -218,6 +238,7 @@
       header,
       .grid,
       .two,
+      .three,
       .row {
         grid-template-columns: 1fr;
       }
@@ -234,6 +255,7 @@
 </head>
 <body>
   <main>
+    <!-- 页面标题和 WebSocket 当前状态。 -->
     <header>
       <div>
         <h1>HxPush 接口测试台</h1>
@@ -246,6 +268,7 @@
     </header>
 
     <div class="grid">
+      <!-- HTTP 接口测试：包含消息列表快捷调用和通用请求。 -->
       <section class="panel">
         <h2>HTTP 测试</h2>
 
@@ -254,13 +277,40 @@
           <input id="baseUrl" autocomplete="off">
         </div>
 
+        <!-- 消息列表接口的三个公开查询参数。 -->
+        <h3>GET /api/messages 获取消息列表</h3>
+
+        <div class="three">
+          <div class="field">
+            <label for="listAppKey">appkey</label>
+            <input id="listAppKey" value="app-demo" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="listPageIndex">pageindex</label>
+            <input id="listPageIndex" type="number" min="1" step="1" value="1">
+          </div>
+          <div class="field">
+            <label for="listPageSize">pagesize</label>
+            <input id="listPageSize" type="number" min="1" step="1" value="10">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="getMessagesButton" class="success" type="button">获取消息列表</button>
+        </div>
+
+        <!-- 其余 HTTP 路由可在通用调用区自由组合。 -->
+        <h3>通用 HTTP 调用</h3>
+
         <div class="two">
           <div class="field">
             <label for="apiPath">接口路径</label>
             <select id="apiPath">
-              <option value="/">GET /</option>
-              <option value="/api/messages">POST /api/messages</option>
-              <option value="/ws">GET /ws 普通 HTTP</option>
+              <option value="/" data-method="GET">GET /</option>
+              <option value="/api/messages" data-method="POST">POST /api/messages</option>
+              <option value="/api/appkeys" data-method="GET">GET /api/appkeys</option>
+              <option value="/api/appkeys" data-method="PUT">PUT /api/appkeys</option>
+              <option value="/ws" data-method="GET">GET /ws 普通 HTTP</option>
             </select>
           </div>
           <div class="field">
@@ -268,8 +318,14 @@
             <select id="httpMethod">
               <option value="GET">GET</option>
               <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
             </select>
           </div>
+        </div>
+
+        <div class="field">
+          <label for="managerPassword">AppKey 管理密码</label>
+          <input id="managerPassword" type="password" value="123" autocomplete="off">
         </div>
 
         <div class="field">
@@ -280,6 +336,7 @@
         <div class="actions">
           <button id="sendHttpButton" class="success" type="button">发送 HTTP</button>
           <button id="fillSampleButton" type="button">生成消息 JSON</button>
+          <button id="fillAppKeysButton" type="button">生成 AppKey JSON</button>
           <button id="clearBodyButton" class="secondary" type="button">清空 Body</button>
         </div>
 
@@ -289,8 +346,14 @@
         </div>
       </section>
 
+      <!-- WebSocket 连接、登记消息和收发日志测试。 -->
       <section class="panel">
         <h2>WebSocket 测试</h2>
+
+        <div class="field">
+          <label for="webSocketAppKey">WebSocket AppKey</label>
+          <input id="webSocketAppKey" value="app-demo" autocomplete="off">
+        </div>
 
         <div class="row">
           <div>
@@ -302,13 +365,13 @@
         </div>
 
         <div class="field">
-          <label for="messageInput">Message</label>
-          <textarea id="messageInput" placeholder="输入消息后点击 Send；输入 exit 可让服务端关闭连接。"></textarea>
+          <label for="messageInput">HxPushMsgModel JSON</label>
+          <textarea id="messageInput" placeholder="连接时会校验 AppKey；后续消息中的 AppKey 必须与连接一致。"></textarea>
         </div>
 
         <div class="actions">
           <button id="sendButton" type="button" disabled>Send</button>
-          <button id="sendExitButton" class="warn" type="button" disabled>Send exit</button>
+          <button id="sendExitButton" class="warn" type="button" disabled>Send bad AppKey</button>
           <button id="clearLogButton" class="secondary" type="button">清空日志</button>
         </div>
 
@@ -321,15 +384,24 @@
   </main>
 
   <script>
+    // 缓存 HTTP 测试区元素，避免请求时重复查找 DOM。
     const baseUrlInput = document.querySelector("#baseUrl");
+    const listAppKeyInput = document.querySelector("#listAppKey");
+    const listPageIndexInput = document.querySelector("#listPageIndex");
+    const listPageSizeInput = document.querySelector("#listPageSize");
+    const getMessagesButton = document.querySelector("#getMessagesButton");
     const apiPathSelect = document.querySelector("#apiPath");
     const httpMethodSelect = document.querySelector("#httpMethod");
+    const managerPasswordInput = document.querySelector("#managerPassword");
     const messageJsonInput = document.querySelector("#messageJson");
     const sendHttpButton = document.querySelector("#sendHttpButton");
     const fillSampleButton = document.querySelector("#fillSampleButton");
+    const fillAppKeysButton = document.querySelector("#fillAppKeysButton");
     const clearBodyButton = document.querySelector("#clearBodyButton");
     const httpResponseBox = document.querySelector("#httpResponse");
 
+    // 缓存 WebSocket 测试区元素。
+    const webSocketAppKeyInput = document.querySelector("#webSocketAppKey");
     const serverUrlInput = document.querySelector("#serverUrl");
     const messageInput = document.querySelector("#messageInput");
     const connectButton = document.querySelector("#connectButton");
@@ -341,24 +413,30 @@
     const statusText = document.querySelector("#statusText");
     const logBox = document.querySelector("#logBox");
 
+    // 保存当前页面唯一的 WebSocket 连接。
     let socket;
 
+    // 页面加载时填充当前站点地址和示例消息。
     baseUrlInput.value = getDefaultHttpBaseUrl();
     serverUrlInput.value = getDefaultWebSocketUrl();
     fillSampleMessage();
     syncMethodWithPath();
 
+    // 绑定 HTTP 测试操作。
     apiPathSelect.addEventListener("change", syncMethodWithPath);
+    getMessagesButton.addEventListener("click", getMessages);
     sendHttpButton.addEventListener("click", sendHttpRequest);
     fillSampleButton.addEventListener("click", fillSampleMessage);
+    fillAppKeysButton.addEventListener("click", fillSampleAppKeys);
     clearBodyButton.addEventListener("click", () => {
       messageJsonInput.value = "";
     });
 
+    // 绑定 WebSocket 连接和消息操作。
     connectButton.addEventListener("click", connect);
     disconnectButton.addEventListener("click", disconnect);
     sendButton.addEventListener("click", sendMessage);
-    sendExitButton.addEventListener("click", () => sendRawMessage("exit"));
+    sendExitButton.addEventListener("click", sendBadAppKeyMessage);
     clearLogButton.addEventListener("click", () => {
       logBox.textContent = "";
     });
@@ -369,6 +447,7 @@
       }
     });
 
+    // 优先使用当前页面来源，直接打开本地文件时回退到默认端口。
     function getDefaultHttpBaseUrl() {
       if (location.protocol === "http:" || location.protocol === "https:") {
         return `${location.protocol}//${location.host}`;
@@ -377,6 +456,7 @@
       return "http://localhost:5212";
     }
 
+    // 根据页面协议自动选择 ws 或 wss。
     function getDefaultWebSocketUrl() {
       if (location.protocol === "http:" || location.protocol === "https:") {
         const protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -386,11 +466,12 @@
       return "ws://localhost:5212/ws";
     }
 
+    // 接口路径变化时同步推荐的 HTTP 方法。
     function syncMethodWithPath() {
-      const path = apiPathSelect.value;
-      httpMethodSelect.value = path === "/api/messages" ? "POST" : "GET";
+      httpMethodSelect.value = apiPathSelect.selectedOptions[0]?.dataset.method || "GET";
     }
 
+    // 同时为 HTTP 和 WebSocket 填充一条可发送的示例消息。
     function fillSampleMessage() {
       const now = new Date();
       const id = `msg-${now.getTime()}`;
@@ -398,29 +479,97 @@
         ID: id,
         AppKey: "app-demo",
         Hwid: "device-001",
+        MsgDate: Math.floor(now.getTime() / 1000),
         Msg: `测试消息 ${now.toLocaleString()}`
       };
 
-      messageJsonInput.value = JSON.stringify(sample, null, 2);
+      const json = JSON.stringify(sample, null, 2);
+      messageJsonInput.value = json;
+      messageInput.value = json;
+      webSocketAppKeyInput.value = sample.AppKey;
       apiPathSelect.value = "/api/messages";
       httpMethodSelect.value = "POST";
     }
 
-    async function sendHttpRequest() {
+    // 填充 AppKey 管理接口的 PUT 测试请求。
+    function fillSampleAppKeys() {
+      const putOption = [...apiPathSelect.options].find(option =>
+        option.value === "/api/appkeys" && option.dataset.method === "PUT");
+
+      if (putOption) {
+        putOption.selected = true;
+      }
+
+      syncMethodWithPath();
+      messageJsonInput.value = JSON.stringify(["app-demo", "app-mobile"], null, 2);
+    }
+
+    // 调用消息列表 GET 接口并格式化显示响应。
+    async function getMessages() {
       const baseUrl = baseUrlInput.value.trim().replace(/\/+$/, "");
-      const path = apiPathSelect.value;
-      const method = httpMethodSelect.value;
-      const url = `${baseUrl}${path}`;
-      const options = { method };
+      const appKey = listAppKeyInput.value.trim();
+      const pageIndex = listPageIndexInput.value;
+      const pageSize = listPageSizeInput.value;
 
       if (!baseUrl) {
         renderHttpResponse("HTTP Base URL 不能为空。", true);
         return;
       }
 
+      if (!appKey) {
+        renderHttpResponse("appkey 不能为空。", true);
+        return;
+      }
+
+      const query = new URLSearchParams({
+        appkey: appKey,
+        pageindex: pageIndex,
+        pagesize: pageSize
+      });
+      const url = `${baseUrl}/api/messages?${query}`;
+
+      renderHttpResponse(`请求中...\nGET ${url}`);
+
+      try {
+        const response = await fetch(url);
+        const text = await response.text();
+        renderHttpResponse(`HTTP ${response.status}\n${tryFormatJson(text)}`);
+      } catch (error) {
+        renderHttpResponse(`请求失败：${error.message}`, true);
+      }
+    }
+
+    // 发送通用 HTTP 请求，非 GET 方法附带 JSON 请求体。
+    async function sendHttpRequest() {
+      const baseUrl = baseUrlInput.value.trim().replace(/\/+$/, "");
+      const path = apiPathSelect.value;
+      const method = httpMethodSelect.value;
+      const url = `${baseUrl}${path}`;
+      const options = { method };
+      const headers = {};
+
+      if (!baseUrl) {
+        renderHttpResponse("HTTP Base URL 不能为空。", true);
+        return;
+      }
+
+      if (path === "/api/appkeys") {
+        const password = managerPasswordInput.value;
+        if (!password) {
+          renderHttpResponse("AppKey 管理密码不能为空。", true);
+          return;
+        }
+
+        headers["X-AppKey-Manager-Password"] = password;
+      }
+
       if (method !== "GET") {
-        options.headers = { "Content-Type": "application/json" };
+        headers["Content-Type"] = "application/json";
         options.body = messageJsonInput.value;
+      }
+
+      if (Object.keys(headers).length > 0) {
+        options.headers = headers;
       }
 
       renderHttpResponse(`请求中...\n${method} ${url}`);
@@ -435,11 +584,29 @@
       }
     }
 
+    // 建立 WebSocket 并注册生命周期事件。
     function connect() {
-      const url = serverUrlInput.value.trim();
+      const serverUrl = serverUrlInput.value.trim();
+      const appKey = webSocketAppKeyInput.value.trim();
 
-      if (!url) {
+      if (!serverUrl) {
         appendLog("Please enter a WebSocket URL.", "error");
+        return;
+      }
+
+      if (!appKey) {
+        appendLog("Please enter a WebSocket AppKey.", "error");
+        return;
+      }
+
+      let url;
+      try {
+        // 握手 URL 中的 AppKey 会覆盖地址里已有的同名参数。
+        const parsedUrl = new URL(serverUrl);
+        parsedUrl.searchParams.set("appkey", appKey);
+        url = parsedUrl.toString();
+      } catch {
+        appendLog("WebSocket URL 格式不正确。", "error");
         return;
       }
 
@@ -470,12 +637,14 @@
       });
     }
 
+    // 主动发起正常关闭。
     function disconnect() {
       if (socket && socket.readyState !== WebSocket.CLOSED) {
         socket.close(1000, "client disconnect");
       }
     }
 
+    // 发送输入框中的消息，成功提交后清空输入。
     function sendMessage() {
       const message = messageInput.value.trim();
 
@@ -489,6 +658,21 @@
       messageInput.focus();
     }
 
+    // 发送错误 AppKey，用于验证服务端策略关闭。
+    function sendBadAppKeyMessage() {
+      const now = new Date();
+      const sample = {
+        ID: `bad-${now.getTime()}`,
+        AppKey: "missing-appkey",
+        Hwid: "device-001",
+        MsgDate: Math.floor(now.getTime() / 1000),
+        Msg: "这个 AppKey 不在白名单中，服务端应直接关闭连接。"
+      };
+
+      sendRawMessage(JSON.stringify(sample));
+    }
+
+    // 仅在连接已打开时发送原始文本。
     function sendRawMessage(message) {
       if (!socket || socket.readyState !== WebSocket.OPEN) {
         appendLog("WebSocket is not connected.", "error");
@@ -499,6 +683,7 @@
       appendLog(`sent ${message}`);
     }
 
+    // 同步连接状态文字、状态点和按钮可用性。
     function setStatus(text, state) {
       statusText.textContent = text;
       statusDot.className = "dot";
@@ -518,11 +703,13 @@
       sendExitButton.disabled = !isConnected;
     }
 
+    // 将 HTTP 结果写入统一响应区域。
     function renderHttpResponse(message, isError = false) {
       const prefix = isError ? "! " : "";
       httpResponseBox.textContent = `${prefix}${message}`;
     }
 
+    // 在 WebSocket 日志中追加带时间的记录。
     function appendLog(message, level = "info") {
       const time = new Date().toLocaleTimeString();
       const prefix = level === "error" ? "!" : ">";
@@ -530,6 +717,7 @@
       logBox.scrollTop = logBox.scrollHeight;
     }
 
+    // JSON 响应使用缩进展示，普通文本保持原样。
     function tryFormatJson(text) {
       try {
         return JSON.stringify(JSON.parse(text), null, 2);

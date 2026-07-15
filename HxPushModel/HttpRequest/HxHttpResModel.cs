@@ -10,7 +10,10 @@ namespace HxPushModel.HttpRequest
         /// 如果是0表示成功
         /// </summary>
         public int code { get; set; }
-        public string msg { get; set; } = string.Empty;
+        /// <summary>
+        /// 普通响应为提示文字，列表接口可返回业务数据数组。
+        /// </summary>
+        public object msg { get; set; } = string.Empty;
         public string otherData { get; set; } = string.Empty;
     }
 }

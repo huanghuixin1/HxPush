@@ -4,7 +4,7 @@ using System.Text;
 namespace HxPushApp.Helpers
 {
     /// <summary>
-    /// WebSocket 客户端帮助类，负责连接、发送、持续接收和关闭连接。
+    /// WebSocket 客户端帮助类，负责携带 AppKey 连接、发送、持续接收和关闭连接。
     /// 页面只需要订阅事件并调用公开方法，不直接处理底层 ClientWebSocket。
     /// </summary>
     public sealed class WebSocketClientHelper : IAsyncDisposable
@@ -16,6 +16,7 @@ namespace HxPushApp.Helpers
         private ClientWebSocket? webSocket;
         private CancellationTokenSource? receiveCts;
         private Task? receiveTask;
+        private string? connectedAppKey;
 
         /// <summary>
         /// 创建 WebSocket 客户端帮助类。
@@ -44,36 +45,66 @@ namespace HxPushApp.Helpers
         public event EventHandler<string>? StatusChanged;
 
         /// <summary>
+        /// 连接状态变化时触发；true 表示已连接，false 表示已断开。
+        /// </summary>
+        public event EventHandler<bool>? ConnectionStateChanged;
+
+        /// <summary>
         /// 当前 WebSocket 是否处于已连接状态。
         /// </summary>
         public bool IsConnected => webSocket?.State == WebSocketState.Open;
 
         /// <summary>
-        /// 连接 WebSocket 服务；连接成功后会自动启动后台接收循环。
+        /// 使用 AppKey 连接 WebSocket 服务；连接成功后会自动启动后台接收循环。
         /// </summary>
-        public async Task ConnectAsync(CancellationToken cancellationToken = default)
+        /// <param name="appKey">用于服务端握手校验的 AppKey。</param>
+        /// <param name="cancellationToken">取消连接操作的令牌。</param>
+        public async Task ConnectAsync(
+            string appKey,
+            CancellationToken cancellationToken = default)
         {
-            if (IsConnected)
+            var normalizedAppKey = appKey?.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedAppKey))
+            {
+                throw new ArgumentException("AppKey 不能为空。", nameof(appKey));
+            }
+
+            if (IsConnected && string.Equals(connectedAppKey, normalizedAppKey, StringComparison.Ordinal))
             {
                 return;
             }
 
+            // AppKey 改变时先断开旧身份，避免复用到不匹配的连接。
             await DisconnectAsync();
 
             var socket = new ClientWebSocket();
+            var connectionUri = BuildConnectionUri(normalizedAppKey);
+            try
+            {
+                using var timeout = CreateOperationTimeout(cancellationToken);
+                await socket.ConnectAsync(connectionUri, timeout.Token);
 
-            using var timeout = CreateOperationTimeout(cancellationToken);
-            await socket.ConnectAsync(serverUri, timeout.Token);
+                webSocket = socket;
+                connectedAppKey = normalizedAppKey;
+                receiveCts = new CancellationTokenSource();
 
-            webSocket = socket;
-            receiveCts = new CancellationTokenSource();
+                RaiseConnectionStateChanged(isConnected: true);
 
-            // 后台持续接收服务端推送，避免阻塞 UI 线程。
-            receiveTask = Task.Run(
-                () => ReceiveMessagesAsync(socket, receiveCts.Token),
-                receiveCts.Token);
+                // 后台持续接收服务端推送，避免阻塞 UI 线程。
+                receiveTask = Task.Run(
+                    () => ReceiveMessagesAsync(socket, receiveCts.Token),
+                    receiveCts.Token);
 
-            RaiseStatusChanged($"已连接：{serverUri}");
+                // 日志不输出查询参数，避免 AppKey 被无意复制或截图传播。
+                RaiseStatusChanged($"已连接：{serverUri}（AppKey 已校验）");
+            }
+            catch
+            {
+                socket.Dispose();
+                connectedAppKey = null;
+                RaiseConnectionStateChanged(isConnected: false);
+                throw;
+            }
         }
 
         /// <summary>
@@ -115,10 +146,12 @@ namespace HxPushApp.Helpers
             var socket = webSocket;
             var currentReceiveCts = receiveCts;
             var currentReceiveTask = receiveTask;
+            var hadConnection = socket is not null;
 
             webSocket = null;
             receiveCts = null;
             receiveTask = null;
+            connectedAppKey = null;
 
             try
             {
@@ -148,6 +181,12 @@ namespace HxPushApp.Helpers
             {
                 currentReceiveCts?.Dispose();
                 socket?.Dispose();
+
+                if (hadConnection)
+                {
+                    RaiseConnectionStateChanged(isConnected: false);
+                    RaiseStatusChanged("连接已断开。");
+                }
             }
         }
 
@@ -217,6 +256,10 @@ namespace HxPushApp.Helpers
             {
                 RaiseStatusChanged($"接收失败：{ex.Message}");
             }
+            finally
+            {
+                RaiseConnectionStateChanged(isConnected: false);
+            }
         }
 
         /// <summary>
@@ -228,6 +271,15 @@ namespace HxPushApp.Helpers
             var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(operationTimeout);
             return timeout;
+        }
+
+        /// <summary>
+        /// 在基础地址上追加经过 URL 编码的 AppKey 查询参数。
+        /// </summary>
+        private Uri BuildConnectionUri(string appKey)
+        {
+            var separator = string.IsNullOrEmpty(serverUri.Query) ? "?" : "&";
+            return new Uri($"{serverUri}{separator}appkey={Uri.EscapeDataString(appKey)}");
         }
 
         /// <summary>
@@ -267,6 +319,14 @@ namespace HxPushApp.Helpers
         private void RaiseStatusChanged(string message)
         {
             StatusChanged?.Invoke(this, message);
+        }
+
+        /// <summary>
+        /// 统一抛出连接状态事件。
+        /// </summary>
+        private void RaiseConnectionStateChanged(bool isConnected)
+        {
+            ConnectionStateChanged?.Invoke(this, isConnected);
         }
     }
 }

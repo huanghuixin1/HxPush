@@ -1,124 +1,198 @@
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using HxPushApp.models.Message;
 
 namespace HxPushServerWeb
 {
-    // 负责 /ws：升级 WebSocket、接收消息、回发 echo、处理断开。
+    // 负责 /ws：握手校验 AppKey、接收消息，并支持 HTTP 推送复用已登记连接。
     internal sealed class HxPushWebSocketHandler
     {
+        // 客户端集合允许连接处理与 HTTP 推送并发访问。
+        private readonly HxPushAppKeyManager appKeyManager;
+        private readonly ConcurrentDictionary<Guid, WebSocketClient> clients = new();
+
+        // 收发消息共用序列化配置，兼容属性名大小写并保留中文。
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            PropertyNameCaseInsensitive = true
+        };
+
+        // 注入 AppKey 白名单管理器。
+        public HxPushWebSocketHandler(HxPushAppKeyManager appKeyManager)
+        {
+            this.appKeyManager = appKeyManager;
+        }
+
+        // 校验并接受 WebSocket 请求，在连接生命周期内维护客户端登记信息。
         public async Task HandleAsync(HttpContext context)
         {
-            // 普通 HTTP 请求不能直接当成 WebSocket 用。
-            // 这里返回 200 + HxHttpResModel JSON，和其它 HTTP 接口保持一致。
             if (!context.WebSockets.IsWebSocketRequest)
             {
+                // 普通 HTTP 请求仍按项目约定返回统一 JSON。
                 await HxPushHttpHandler.ToJsonResult(
                     HxPushHttpHandler.Error("Please connect with WebSocket.")).ExecuteAsync(context);
                 return;
             }
 
-            using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-
-            // 同一个 WebSocket 不能并发 SendAsync，所以所有发送都经过这个锁。
-            using var sendLock = new SemaphoreSlim(1, 1);
-            using var connectionCancellation = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
-
-            await SendTextAsync(webSocket, "connected", sendLock, connectionCancellation.Token);
-            Console.WriteLine("客户端链接成功");
-
-            // 示例推送：服务端每 5 秒主动发一条消息，方便页面观察长连接。
-            var serverPushTask = Task.Run(async () =>
+            // 在协议升级前校验查询参数，失败时客户端不会建立 WebSocket 连接。
+            var appKey = context.Request.Query["appkey"].ToString().Trim();
+            if (string.IsNullOrWhiteSpace(appKey) || !appKeyManager.Exists(appKey))
             {
-                while (webSocket.State == WebSocketState.Open && !connectionCancellation.IsCancellationRequested)
-                {
-                    await SendTextAsync(webSocket, "serverMsg" + DateTime.Now.ToString("HH:mm:ss"), sendLock, connectionCancellation.Token);
-                    await Task.Delay(TimeSpan.FromSeconds(5), connectionCancellation.Token);
-                }
-            }, connectionCancellation.Token);
+                await HxPushHttpHandler.ToJsonResult(
+                    HxPushHttpHandler.Error("AppKey 不存在或无效。"),
+                    StatusCodes.Status403Forbidden).ExecuteAsync(context);
+                return;
+            }
+
+            using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+            var client = new WebSocketClient(Guid.NewGuid(), appKey, webSocket);
+            clients[client.Id] = client;
+
+            Console.WriteLine($"WebSocket 客户端连接：client={client.Id}, appKey={client.AppKey}");
 
             try
             {
-                await ReceiveLoopAsync(webSocket, sendLock, connectionCancellation.Token);
+                await ReceiveLoopAsync(client, context.RequestAborted);
             }
             finally
             {
-                // 接收循环结束后，通知后台推送任务也退出。
-                connectionCancellation.Cancel();
-            }
-
-            try
-            {
-                await serverPushTask;
-            }
-            catch (OperationCanceledException) when (connectionCancellation.IsCancellationRequested)
-            {
-            }
-            catch (WebSocketException) when (webSocket.State != WebSocketState.Open)
-            {
+                // 无论正常关闭还是异常退出，都及时移除连接。
+                clients.TryRemove(client.Id, out _);
+                Console.WriteLine($"WebSocket 客户端断开：{client.Id}");
             }
         }
 
-        private static async Task ReceiveLoopAsync(WebSocket webSocket, SemaphoreSlim sendLock, CancellationToken cancellationToken)
+        // 将消息推送给所有登记了相同 AppKey 的在线连接。
+        public async Task<int> SendToAppKeyAsync(HxPushMsgModel message, CancellationToken cancellationToken)
+        {
+            var json = JsonSerializer.Serialize(message, JsonOptions);
+            var sentCount = 0;
+
+            foreach (var client in clients.Values)
+            {
+                if (!string.Equals(client.AppKey, message.AppKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (client.WebSocket.State != WebSocketState.Open)
+                {
+                    // 顺便清理已失效但尚未退出接收循环的连接。
+                    clients.TryRemove(client.Id, out _);
+                    continue;
+                }
+
+                try
+                {
+                    await SendTextAsync(client, json, cancellationToken);
+                    sentCount++;
+                }
+                catch (WebSocketException)
+                {
+                    // 单个客户端发送失败不应中断其他客户端推送。
+                    clients.TryRemove(client.Id, out _);
+                }
+            }
+
+            return sentCount;
+        }
+
+        // 持续接收客户端消息，直到连接关闭或数据不合法。
+        private async Task ReceiveLoopAsync(WebSocketClient client, CancellationToken cancellationToken)
+        {
+            while (client.WebSocket.State == WebSocketState.Open)
+            {
+                var text = await ReceiveTextAsync(client.WebSocket, cancellationToken);
+
+                if (text is null)
+                {
+                    break;
+                }
+
+                HxPushMsgModel? message;
+
+                try
+                {
+                    message = JsonSerializer.Deserialize<HxPushMsgModel>(text, JsonOptions);
+                }
+                catch (JsonException)
+                {
+                    // 无法解析时使用标准关闭码告知客户端载荷错误。
+                    await CloseAsync(client.WebSocket, WebSocketCloseStatus.InvalidPayloadData, "invalid HxPushMsgModel json", cancellationToken);
+                    break;
+                }
+
+                if (message is null ||
+                    string.IsNullOrWhiteSpace(message.AppKey) ||
+                    string.IsNullOrWhiteSpace(message.Hwid))
+                {
+                    await CloseAsync(client.WebSocket, WebSocketCloseStatus.InvalidPayloadData, "AppKey and Hwid are required", cancellationToken);
+                    break;
+                }
+
+                if (!string.Equals(message.AppKey.Trim(), client.AppKey, StringComparison.Ordinal) ||
+                    !appKeyManager.Exists(client.AppKey))
+                {
+                    // 消息不能切换握手时已确认的 AppKey，白名单撤销后也会关闭旧连接。
+                    await CloseAsync(client.WebSocket, WebSocketCloseStatus.PolicyViolation, "AppKey does not match connection", cancellationToken);
+                    break;
+                }
+
+                // AppKey 已在握手阶段登记，这里只补充设备标识。
+                client.Hwid = message.Hwid.Trim();
+
+                Console.WriteLine($"WebSocket 客户端登记：client={client.Id}, appKey={client.AppKey}, hwid={client.Hwid}");
+            }
+        }
+
+        // 合并 WebSocket 分片并只接受 UTF-8 文本消息。
+        private static async Task<string?> ReceiveTextAsync(WebSocket webSocket, CancellationToken cancellationToken)
         {
             var buffer = new byte[1024 * 4];
+            using var message = new MemoryStream();
 
-            // 只处理文本消息；收到 close 或 exit 就正常断开。
-            while (webSocket.State == WebSocketState.Open)
+            while (true)
             {
                 var result = await webSocket.ReceiveAsync(buffer, cancellationToken);
 
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
-                    await webSocket.CloseAsync(
-                        WebSocketCloseStatus.NormalClosure,
-                        "closed by client",
-                        cancellationToken);
-                    Console.WriteLine("客户端断开");
-                    break;
+                    // 对客户端关闭请求完成标准关闭握手。
+                    await CloseAsync(webSocket, WebSocketCloseStatus.NormalClosure, "closed by client", cancellationToken);
+                    return null;
                 }
 
                 if (result.MessageType != WebSocketMessageType.Text)
                 {
-                    await webSocket.CloseAsync(
-                        WebSocketCloseStatus.InvalidMessageType,
-                        "text message only",
-                        cancellationToken);
-                    break;
+                    await CloseAsync(webSocket, WebSocketCloseStatus.InvalidMessageType, "text message only", cancellationToken);
+                    return null;
                 }
 
-                var text = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                Console.WriteLine("接收到消息" + text);
+                message.Write(buffer, 0, result.Count);
 
-                if (text == "exit")
+                if (result.EndOfMessage)
                 {
-                    // 服务端主动关闭后必须 break，不能再继续 SendAsync。
-                    await webSocket.CloseAsync(
-                        WebSocketCloseStatus.NormalClosure,
-                        "closed by server(client send exit)",
-                        cancellationToken);
-                    Console.WriteLine("客户端主动断开");
-                    break;
+                    return Encoding.UTF8.GetString(message.ToArray());
                 }
-
-                await SendTextAsync(webSocket, $"echo: {text}", sendLock, cancellationToken);
             }
         }
 
-        private static async Task SendTextAsync(
-            WebSocket webSocket,
-            string text,
-            SemaphoreSlim sendLock,
-            CancellationToken cancellationToken)
+        // 串行发送一条完整文本消息。
+        private static async Task SendTextAsync(WebSocketClient client, string text, CancellationToken cancellationToken)
         {
             var bytes = Encoding.UTF8.GetBytes(text);
 
-            // 串行化发送，并在发送前确认连接仍然打开。
-            await sendLock.WaitAsync(cancellationToken);
+            // 同一个 WebSocket 不能并发 SendAsync，所以每个客户端有自己的发送锁。
+            await client.SendLock.WaitAsync(cancellationToken);
             try
             {
-                if (webSocket.State == WebSocketState.Open)
+                if (client.WebSocket.State == WebSocketState.Open)
                 {
-                    await webSocket.SendAsync(
+                    await client.WebSocket.SendAsync(
                         bytes,
                         WebSocketMessageType.Text,
                         WebSocketMessageFlags.EndOfMessage,
@@ -127,8 +201,48 @@ namespace HxPushServerWeb
             }
             finally
             {
-                sendLock.Release();
+                client.SendLock.Release();
             }
+        }
+
+        // 仅在允许发起关闭握手的状态下关闭连接。
+        private static async Task CloseAsync(
+            WebSocket webSocket,
+            WebSocketCloseStatus closeStatus,
+            string statusDescription,
+            CancellationToken cancellationToken)
+        {
+            if (webSocket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+            {
+                await webSocket.CloseAsync(closeStatus, statusDescription, cancellationToken);
+            }
+        }
+
+        // 保存单个客户端的连接、登记信息和发送锁。
+        private sealed class WebSocketClient
+        {
+            // 绑定连接唯一标识、已校验 AppKey 与底层 WebSocket。
+            public WebSocketClient(Guid id, string appKey, WebSocket webSocket)
+            {
+                Id = id;
+                AppKey = appKey;
+                WebSocket = webSocket;
+            }
+
+            // 连接标识用于并发字典增删。
+            public Guid Id { get; }
+
+            // 当前客户端的底层 WebSocket。
+            public WebSocket WebSocket { get; }
+
+            // 防止同一连接发生并发发送。
+            public SemaphoreSlim SendLock { get; } = new(1, 1);
+
+            // 握手阶段确认后，连接生命周期内不允许切换 AppKey。
+            public string AppKey { get; }
+
+            // 首条合法业务消息登记的设备标识。
+            public string Hwid { get; set; } = string.Empty;
         }
     }
 }

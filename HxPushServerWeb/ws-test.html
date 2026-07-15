@@ -1,10 +1,12 @@
 <!doctype html>
+<!-- 早期独立 WebSocket 测试页；服务实际发布的是 wwwroot/ws-test.html。 -->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HxPush WebSocket 测试</title>
   <style>
+    /* 页面主题和基础布局。 */
     :root {
       color-scheme: light dark;
       font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
@@ -72,6 +74,7 @@
       box-shadow: 0 0 0 3px rgba(75, 108, 183, 0.18);
     }
 
+    /* 连接区和消息区使用响应式网格。 */
     .row {
       display: grid;
       grid-template-columns: 1fr auto auto;
@@ -123,6 +126,7 @@
       font-weight: 600;
     }
 
+    /* 状态点颜色反映连接结果。 */
     .dot {
       width: 10px;
       height: 10px;
@@ -165,9 +169,10 @@
   </style>
 </head>
 <body>
+  <!-- 旧版页面仅提供 WebSocket 连接和文本收发。 -->
   <main>
     <h1>HxPush WebSocket 测试</h1>
-    <p>启动服务后，填入控制台输出的 WebSocket 地址，例如 <code>ws://192.168.1.10:5000/ws</code>。</p>
+    <p>启动服务后，地址需要携带 AppKey，例如 <code>ws://192.168.1.10:5212/ws?appkey=app-demo</code>。</p>
 
     <div class="status">
       <span id="statusDot" class="dot"></span>
@@ -197,6 +202,7 @@
   </main>
 
   <script>
+    // 缓存页面控件并保存当前连接。
     const serverUrlInput = document.querySelector("#serverUrl");
     const messageInput = document.querySelector("#messageInput");
     const connectButton = document.querySelector("#connectButton");
@@ -208,6 +214,7 @@
 
     let socket;
 
+    // 初始化默认地址并绑定用户操作。
     serverUrlInput.value = getDefaultWebSocketUrl();
 
     connectButton.addEventListener("click", connect);
@@ -219,15 +226,17 @@
       }
     });
 
+    // 根据当前页面协议生成默认 WebSocket 地址。
     function getDefaultWebSocketUrl() {
       if (location.protocol === "http:" || location.protocol === "https:") {
         const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-        return `${protocol}//${location.hostname}:5000/ws`;
+        return `${protocol}//${location.hostname}:5212/ws?appkey=app-demo`;
       }
 
-      return "ws://localhost:5000/ws";
+      return "ws://localhost:5212/ws?appkey=app-demo";
     }
 
+    // 建立连接并监听打开、消息、关闭和错误事件。
     function connect() {
       const url = serverUrlInput.value.trim();
 
@@ -263,12 +272,14 @@
       });
     }
 
+    // 主动发起正常关闭。
     function disconnect() {
       if (socket && socket.readyState !== WebSocket.CLOSED) {
         socket.close(1000, "client disconnect");
       }
     }
 
+    // 发送输入框文本并在日志中记录。
     function sendMessage() {
       const message = messageInput.value.trim();
 
@@ -288,6 +299,7 @@
       messageInput.focus();
     }
 
+    // 同步状态文字、状态点和按钮可用性。
     function setStatus(text, state) {
       statusText.textContent = text;
       statusDot.className = "dot";
@@ -306,6 +318,7 @@
       sendButton.disabled = !isConnected;
     }
 
+    // 追加带时间的页面日志。
     function appendLog(message, level = "info") {
       const time = new Date().toLocaleTimeString();
       const prefix = level === "error" ? "✖" : "•";

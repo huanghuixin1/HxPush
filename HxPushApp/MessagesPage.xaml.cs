@@ -2,14 +2,37 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using HxPushApp.Helpers.Sqlite;
+using HxPushApp.models.Message;
 
 namespace HxPushApp
 {
     public partial class MessagesPage : ContentPage, INotifyPropertyChanged
     {
-        public ObservableCollection<MessageItem> Messages { get; } = new();
+        const int PageSize = 50;
+
+        readonly SemaphoreSlim loadLock = new(1, 1);
+        bool hasMoreMessages = true;
+        bool isLoadingMore;
+        bool isToastVisible;
+        bool hasShownNoMoreToast;
+
+        public ObservableCollection<HxPushMsgModel> Messages { get; } = new();
+
+        public bool IsLoadingMore
+        {
+            get => isLoadingMore;
+            private set
+            {
+                if (isLoadingMore == value)
+                {
+                    return;
+                }
+
+                isLoadingMore = value;
+                OnPropertyChanged();
+            }
+        }
 
         string summaryText = "正在加载消息...";
         public string SummaryText
@@ -37,38 +60,138 @@ namespace HxPushApp
         async void OnLoaded(object? sender, EventArgs e)
         {
             Loaded -= OnLoaded;
-            await LoadMessagesAsync();
+            await RefreshMessagesAsync();
         }
 
-        async Task LoadMessagesAsync()
+        async void OnRefreshing(object? sender, EventArgs e)
         {
             try
             {
-                await using var stream = await FileSystem.OpenAppPackageFileAsync("msgList.json");
-                var response = await JsonSerializer.DeserializeAsync<MessageListResponse>(stream);
+                await RefreshMessagesAsync();
+            }
+            finally
+            {
+                if (sender is RefreshView refreshView)
+                {
+                    refreshView.IsRefreshing = false;
+                }
+            }
+        }
 
-                //using HttpClient client = new HttpClient();
-                //var ipRet = await client.GetAsync("https://ip.huixingfifa.top");
-                //Title = await ipRet.Content.ReadAsStringAsync();
-
+        async Task RefreshMessagesAsync()
+        {
+            await loadLock.WaitAsync();
+            try
+            {
                 Messages.Clear();
-                foreach (var message in response?.Data ?? [])
+                SummaryText = "正在加载消息...";
+                hasShownNoMoreToast = false;
+
+                var recentMessages = await SqliteHelper.Instance.GetRecentMessagesAsync(PageSize);
+                foreach (var message in recentMessages)
                 {
                     Messages.Add(message);
                 }
 
-                SummaryText = $"共 {Messages.Count} 条消息";
+                hasMoreMessages = recentMessages.Count == PageSize;
+                SummaryText = $"已加载 {Messages.Count} 条消息";
             }
             catch
             {
                 Messages.Clear();
+                hasMoreMessages = false;
                 SummaryText = "消息加载失败";
+            }
+            finally
+            {
+                loadLock.Release();
+            }
+        }
+
+        async void OnMessagesScrolled(object? sender, ItemsViewScrolledEventArgs e)
+        {
+            if (e.VerticalDelta <= 0 ||
+                Messages.Count == 0 ||
+                e.LastVisibleItemIndex < Messages.Count - 1)
+            {
+                return;
+            }
+
+            await LoadMoreMessagesAsync();
+        }
+
+        async Task LoadMoreMessagesAsync()
+        {
+            if (!hasMoreMessages)
+            {
+                await ShowNoMoreDataToastAsync();
+                return;
+            }
+
+            if (!await loadLock.WaitAsync(0))
+            {
+                return;
+            }
+
+            try
+            {
+                IsLoadingMore = true;
+                var lastMessage = Messages[^1];
+                var olderMessages = await SqliteHelper.Instance.GetMessagesBeforeAsync(
+                    lastMessage.MsgDate,
+                    lastMessage.ID,
+                    PageSize);
+
+                foreach (var message in olderMessages)
+                {
+                    Messages.Add(message);
+                }
+
+                hasMoreMessages = olderMessages.Count == PageSize;
+                SummaryText = $"已加载 {Messages.Count} 条消息";
+
+                if (olderMessages.Count == 0)
+                {
+                    await ShowNoMoreDataToastAsync();
+                }
+            }
+            catch
+            {
+                SummaryText = "更多消息加载失败";
+            }
+            finally
+            {
+                IsLoadingMore = false;
+                loadLock.Release();
+            }
+        }
+
+        async Task ShowNoMoreDataToastAsync()
+        {
+            if (isToastVisible || hasShownNoMoreToast)
+            {
+                return;
+            }
+
+            isToastVisible = true;
+            hasShownNoMoreToast = true;
+            try
+            {
+                NoMoreDataToast.IsVisible = true;
+                await NoMoreDataToast.FadeToAsync(1, 150);
+                await Task.Delay(1500);
+                await NoMoreDataToast.FadeToAsync(0, 150);
+            }
+            finally
+            {
+                NoMoreDataToast.IsVisible = false;
+                isToastVisible = false;
             }
         }
 
         async void OnMessageSelected(object? sender, SelectionChangedEventArgs e)
         {
-            if (e.CurrentSelection.FirstOrDefault() is not MessageItem message)
+            if (e.CurrentSelection.FirstOrDefault() is not HxPushMsgModel message)
             {
                 return;
             }
@@ -90,29 +213,5 @@ namespace HxPushApp
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
-    }
-
-    public sealed class MessageListResponse
-    {
-        [JsonPropertyName("code")]
-        public int Code { get; set; }
-
-        [JsonPropertyName("msg")]
-        public string? Msg { get; set; }
-
-        [JsonPropertyName("data")]
-        public List<MessageItem>? Data { get; set; }
-    }
-
-    public sealed class MessageItem
-    {
-        [JsonPropertyName("content")]
-        public string Content { get; set; } = string.Empty;
-
-        [JsonPropertyName("id")]
-        public int Id { get; set; }
-
-        [JsonPropertyName("hwid")]
-        public string Hwid { get; set; } = string.Empty;
     }
 }

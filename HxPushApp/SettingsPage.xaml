@@ -24,11 +24,56 @@
             Grid.Row="2"
             Spacing="16">
 
-            <Button
-                x:Name="WebSocketTestButton"
-                Text="测试链接 WebSocket"
-                Clicked="OnWebSocketTestClicked"
-                HorizontalOptions="Fill" />
+            <VerticalStackLayout Spacing="8">
+                <Label
+                    Text="AppKey"
+                    FontSize="16"
+                    FontAttributes="Bold" />
+
+                <Grid
+                    ColumnDefinitions="*,Auto"
+                    ColumnSpacing="10">
+                    <Entry
+                        x:Name="AppKeyEntry"
+                        Grid.Column="0"
+                        Placeholder="请输入 AppKey"
+                        ClearButtonVisibility="WhileEditing"
+                        MaxLength="128"
+                        ReturnType="Done" />
+
+                    <Button
+                        x:Name="SaveAppKeyButton"
+                        Grid.Column="1"
+                        Text="保存"
+                        Clicked="OnSaveAppKeyClicked"
+                        VerticalOptions="Fill" />
+                </Grid>
+
+                <Label
+                    x:Name="AppKeySaveStatusLabel"
+                    Text="保存在当前设备，用于区分不同用户。"
+                    FontSize="13"
+                    TextColor="{AppThemeBinding Light=#666666, Dark=#B8B8B8}" />
+            </VerticalStackLayout>
+
+            <Grid
+                ColumnDefinitions="*,*"
+                ColumnSpacing="10">
+                <Button
+                    x:Name="WebSocketTestButton"
+                    Grid.Column="0"
+                    Text="测试连接"
+                    Clicked="OnWebSocketTestClicked"
+                    HorizontalOptions="Fill" />
+
+                <Button
+                    x:Name="WebSocketDisconnectButton"
+                    Grid.Column="1"
+                    Text="断开连接"
+                    IsEnabled="False"
+                    Clicked="OnWebSocketDisconnectClicked"
+                    HorizontalOptions="Fill" />
+            </Grid>
 
             <Grid ColumnDefinitions="*,110">
                 <Editor

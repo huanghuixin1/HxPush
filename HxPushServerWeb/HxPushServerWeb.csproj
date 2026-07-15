@@ -1,29 +1,36 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <!-- 使用 .NET 10，并开启可空引用和隐式 using。 -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- SQLite 负责消息持久化，共享项目提供请求和消息模型。 -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
     <ProjectReference Include="..\HxPushModel\HxPushModel.csproj" />
   </ItemGroup>
 
+  <!-- 发布或构建时同步复制浏览器接口测试页。 -->
   <ItemGroup>
     <Content Update="wwwroot\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
 
+  <!-- 数据库不覆盖，AppKey 白名单和管理密码按最新配置复制。 -->
   <ItemGroup>
     <None Update="App_Data\hxpush.db">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </None>
-    <Content Update="App_Data\appkeys.txt">
+    <None Update="App_Data\appkeys.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    </None>
+    <None Update="App_Data\appkey-password.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

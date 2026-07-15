@@ -51,7 +51,7 @@
                             FontSize="13"
                             TextColor="{AppThemeBinding Light=#777777, Dark=#AAAAAA}" />
                         <Label
-                            Text="{Binding Content}"
+                            Text="{Binding MessageContent}"
                             FontSize="17"
                             LineBreakMode="WordWrap" />
                     </VerticalStackLayout>

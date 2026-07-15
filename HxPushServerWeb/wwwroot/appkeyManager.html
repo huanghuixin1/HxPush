@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AppKey 管理</title>
+  <style>
+    /* 管理页保持单一职责，使用紧凑的工具型布局。 */
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f4f6f8;
+      color: #1d2939;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #f4f6f8;
+    }
+
+    main {
+      width: min(760px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.25;
+    }
+
+    .state {
+      flex: 0 0 auto;
+      padding: 5px 9px;
+      border: 1px solid #cfd6df;
+      border-radius: 6px;
+      background: #fff;
+      color: #475467;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .state.unlocked {
+      border-color: #8ac7a0;
+      background: #edf9f1;
+      color: #176b38;
+    }
+
+    .panel {
+      padding: 20px;
+      border: 1px solid #d7dde5;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 8px 24px rgba(16, 24, 40, 0.06);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    input,
+    textarea,
+    button {
+      font: inherit;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      border: 1px solid #bfc8d4;
+      border-radius: 6px;
+      padding: 10px 12px;
+      background: #fff;
+      color: #1d2939;
+      outline: none;
+    }
+
+    input:focus,
+    textarea:focus {
+      border-color: #16794a;
+      box-shadow: 0 0 0 3px rgba(22, 121, 74, 0.14);
+    }
+
+    textarea {
+      min-height: 360px;
+      resize: vertical;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      line-height: 1.55;
+    }
+
+    textarea:disabled {
+      background: #f2f4f7;
+      color: #98a2b3;
+      cursor: not-allowed;
+    }
+
+    button {
+      min-height: 42px;
+      border: 0;
+      border-radius: 6px;
+      padding: 9px 16px;
+      background: #16794a;
+      color: #fff;
+      cursor: pointer;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    button.secondary {
+      background: #344054;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+    }
+
+    .auth-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .editor {
+      margin-top: 20px;
+      padding-top: 18px;
+      border-top: 1px solid #e4e7ec;
+    }
+
+    .editor-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .count {
+      color: #667085;
+      font-size: 13px;
+    }
+
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 12px;
+    }
+
+    .status {
+      min-height: 22px;
+      margin-top: 14px;
+      color: #475467;
+      font-size: 14px;
+    }
+
+    .status.success {
+      color: #176b38;
+    }
+
+    .status.error {
+      color: #b42318;
+    }
+
+    @media (max-width: 560px) {
+      main {
+        width: min(100% - 24px, 760px);
+        padding: 20px 0;
+      }
+
+      header,
+      .auth-row {
+        align-items: stretch;
+        grid-template-columns: 1fr;
+      }
+
+      header {
+        display: flex;
+      }
+
+      .auth-row button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>AppKey 管理</h1>
+      <span id="lockState" class="state">未验证</span>
+    </header>
+
+    <!-- 页面只提供密码验证、AppKey 读取和覆盖保存。 -->
+    <section class="panel">
+      <form id="managerForm">
+        <div class="auth-row">
+          <div>
+            <label for="password">管理密码</label>
+            <input id="password" type="password" autocomplete="off" required>
+          </div>
+          <button id="loadButton" class="secondary" type="submit">读取 AppKey</button>
+        </div>
+
+        <div class="editor">
+          <div class="editor-heading">
+            <label for="appKeys">AppKey（每行一个）</label>
+            <span id="appKeyCount" class="count">0 条</span>
+          </div>
+          <textarea id="appKeys" spellcheck="false" disabled></textarea>
+          <div class="actions">
+            <button id="saveButton" type="button" disabled>保存 AppKey</button>
+          </div>
+        </div>
+
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    const passwordHeader = "X-AppKey-Manager-Password";
+    const apiUrl = "/api/appkeys";
+
+    // 缓存页面元素并记录本次验证通过的密码。
+    const managerForm = document.querySelector("#managerForm");
+    const passwordInput = document.querySelector("#password");
+    const loadButton = document.querySelector("#loadButton");
+    const appKeysInput = document.querySelector("#appKeys");
+    const saveButton = document.querySelector("#saveButton");
+    const appKeyCount = document.querySelector("#appKeyCount");
+    const lockState = document.querySelector("#lockState");
+    const statusBox = document.querySelector("#status");
+
+    let verifiedPassword = "";
+    let isBusy = false;
+
+    managerForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      loadAppKeys();
+    });
+
+    saveButton.addEventListener("click", saveAppKeys);
+    appKeysInput.addEventListener("input", updateCount);
+
+    // 密码变化后立即清空数据并重新锁定，避免未验证状态继续读取或编辑。
+    passwordInput.addEventListener("input", () => {
+      if (passwordInput.value !== verifiedPassword) {
+        lockEditor();
+      }
+    });
+
+    // 验证密码并从服务端读取完整 AppKey 列表。
+    async function loadAppKeys() {
+      const password = passwordInput.value;
+      if (!password) {
+        showStatus("请输入管理密码。", "error");
+        return;
+      }
+
+      setBusy(true);
+      lockEditor();
+
+      try {
+        const response = await fetch(apiUrl, {
+          headers: { [passwordHeader]: password },
+          cache: "no-store"
+        });
+        const result = await readResult(response);
+
+        if (!response.ok || result.code !== 0 || !Array.isArray(result.msg)) {
+          throw new Error(getResultMessage(result, "读取失败。"));
+        }
+
+        verifiedPassword = password;
+        appKeysInput.value = result.msg.join("\n");
+        unlockEditor();
+        updateCount();
+        showStatus("AppKey 已读取。", "success");
+      } catch (error) {
+        lockEditor();
+        showStatus(error.message, "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    // 覆盖保存去空行、去重后的 AppKey 列表。
+    async function saveAppKeys() {
+      if (!verifiedPassword || passwordInput.value !== verifiedPassword) {
+        lockEditor();
+        showStatus("请重新验证管理密码。", "error");
+        return;
+      }
+
+      const appKeys = normalizeAppKeys(appKeysInput.value);
+      setBusy(true);
+
+      try {
+        const response = await fetch(apiUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            [passwordHeader]: verifiedPassword
+          },
+          body: JSON.stringify(appKeys),
+          cache: "no-store"
+        });
+        const result = await readResult(response);
+
+        if (!response.ok || result.code !== 0) {
+          throw new Error(getResultMessage(result, "保存失败。"));
+        }
+
+        appKeysInput.value = appKeys.join("\n");
+        updateCount();
+        showStatus("AppKey 已保存并立即生效。", "success");
+      } catch (error) {
+        showStatus(error.message, "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    // 每行解析一个 AppKey，并在提交前去除重复项。
+    function normalizeAppKeys(value) {
+      return [...new Set(
+        value.split(/\r?\n/)
+          .map(item => item.trim())
+          .filter(Boolean)
+      )].sort((left, right) => left.localeCompare(right));
+    }
+
+    // 解析统一响应，非 JSON 内容也转成可读错误。
+    async function readResult(response) {
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error(text || `HTTP ${response.status}`);
+      }
+    }
+
+    function getResultMessage(result, fallback) {
+      return typeof result?.msg === "string" ? result.msg : fallback;
+    }
+
+    // 锁定时清空已读取内容，确保列表只能在当前密码验证通过后显示。
+    function lockEditor() {
+      verifiedPassword = "";
+      appKeysInput.value = "";
+      appKeysInput.disabled = true;
+      saveButton.disabled = true;
+      lockState.textContent = "未验证";
+      lockState.className = "state";
+      updateCount();
+    }
+
+    function unlockEditor() {
+      appKeysInput.disabled = isBusy;
+      saveButton.disabled = isBusy;
+      lockState.textContent = "已验证";
+      lockState.className = "state unlocked";
+    }
+
+    // 请求期间禁用控件，避免并发读取或重复保存。
+    function setBusy(value) {
+      isBusy = value;
+      passwordInput.disabled = value;
+      loadButton.disabled = value;
+
+      if (verifiedPassword) {
+        appKeysInput.disabled = value;
+        saveButton.disabled = value;
+      }
+    }
+
+    function updateCount() {
+      appKeyCount.textContent = `${normalizeAppKeys(appKeysInput.value).length} 条`;
+    }
+
+    function showStatus(message, state) {
+      statusBox.textContent = message;
+      statusBox.className = `status ${state}`;
+    }
+  </script>
+</body>
+</html>

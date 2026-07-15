@@ -1,27 +1,28 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using HxPushApp.models.Message;
 
 namespace HxPushApp
 {
     public partial class MessageDetailPage : ContentPage, IQueryAttributable, INotifyPropertyChanged
     {
-        int id;
-        string content = string.Empty;
+        string id = string.Empty;
+        string messageContent = string.Empty;
         string hwid = string.Empty;
 
-        public string MessageNo => id > 0 ? $"消息 #{id}" : "消息详情";
+        public string MessageNo => !string.IsNullOrWhiteSpace(id) ? $"消息 #{id}" : "消息详情";
 
-        public string Content
+        public string MessageContent
         {
-            get => content;
+            get => messageContent;
             set
             {
-                if (content == value)
+                if (messageContent == value)
                 {
                     return;
                 }
 
-                content = value;
+                messageContent = value;
                 OnPropertyChanged();
             }
         }
@@ -49,13 +50,13 @@ namespace HxPushApp
 
         public void ApplyQueryAttributes(IDictionary<string, object> query)
         {
-            if (!query.TryGetValue("Message", out var value) || value is not MessageItem message)
+            if (!query.TryGetValue("Message", out var value) || value is not HxPushMsgModel message)
             {
                 return;
             }
 
-            id = message.Id;
-            Content = message.Content;
+            id = message.ID;
+            MessageContent = message.Msg;
             Hwid = message.Hwid;
             OnPropertyChanged(nameof(MessageNo));
         }
