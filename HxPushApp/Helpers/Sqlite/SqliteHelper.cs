@@ -14,23 +14,54 @@ namespace HxPushApp.Helpers.Sqlite
         private const int MaxStoredMessages = 10_000;
         private static readonly Lazy<SqliteHelper> LazyInstance = new(() => new SqliteHelper());
 
-        private readonly SQLiteAsyncConnection database;
+        private readonly string databasePath;
+        private SQLiteAsyncConnection database;
         private readonly SemaphoreSlim initializeLock = new(1, 1);
         private readonly SemaphoreSlim saveLock = new(1, 1);
         private bool isInitialized;
 
         private SqliteHelper()
         {
-            var databasePath = Path.Combine(FileSystem.AppDataDirectory, DatabaseFileName);
-            database = new SQLiteAsyncConnection(
-                databasePath,
-                SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.SharedCache);
+            databasePath = Path.Combine(FileSystem.AppDataDirectory, DatabaseFileName);
+            database = CreateDatabaseConnection();
         }
 
         /// <summary>
         /// 全局单例，方便页面或其它服务复用同一个数据库连接。
         /// </summary>
         public static SqliteHelper Instance => LazyInstance.Value;
+
+        /// <summary>
+        /// Raised after the local SQLite database has been deleted.
+        /// </summary>
+        public event EventHandler? DatabaseDeleted;
+
+        /// <summary>
+        /// Closes and removes the local SQLite database and its journal files.
+        /// A new empty database will be created on the next read or write operation.
+        /// </summary>
+        public async Task DeleteDatabaseAsync()
+        {
+            await initializeLock.WaitAsync();
+            await saveLock.WaitAsync();
+            try
+            {
+                await database.CloseAsync();
+                DeleteDatabaseFile(databasePath);
+                DeleteDatabaseFile($"{databasePath}-wal");
+                DeleteDatabaseFile($"{databasePath}-shm");
+
+                database = CreateDatabaseConnection();
+                isInitialized = false;
+            }
+            finally
+            {
+                saveLock.Release();
+                initializeLock.Release();
+            }
+
+            DatabaseDeleted?.Invoke(this, EventArgs.Empty);
+        }
 
         /// <summary>
         /// 初始化数据库表结构。重复调用是安全的。
@@ -262,6 +293,21 @@ namespace HxPushApp.Helpers.Sqlite
         private sealed class DeviceIdRow
         {
             public string Hwid { get; set; } = string.Empty;
+        }
+
+        private SQLiteAsyncConnection CreateDatabaseConnection()
+        {
+            return new SQLiteAsyncConnection(
+                databasePath,
+                SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.SharedCache);
+        }
+
+        private static void DeleteDatabaseFile(string path)
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
         }
     }
 }

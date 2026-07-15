@@ -1,4 +1,5 @@
 using HxPushApp.Helpers;
+using HxPushApp.Helpers.Sqlite;
 using HxPushApp.models.Message;
 using System.Text.Json;
 
@@ -178,6 +179,35 @@ namespace HxPushApp
             finally
             {
                 UpdateWebSocketButtonStates(pushConnectionService.IsConnected);
+            }
+        }
+
+        private async void OnDeleteLocalCacheClicked(object? sender, EventArgs e)
+        {
+            var confirmed = await DisplayAlert(
+                "删除本地缓存",
+                "这会删除本机保存的全部消息，且无法恢复。",
+                "删除",
+                "取消");
+            if (!confirmed)
+            {
+                return;
+            }
+
+            DeleteLocalCacheButton.IsEnabled = false;
+            try
+            {
+                await SqliteHelper.Instance.DeleteDatabaseAsync();
+                AppendWebSocketLog("本地消息缓存已删除。");
+                await ShowSettingsToastAsync("本地缓存已删除");
+            }
+            catch (Exception ex)
+            {
+                AppendWebSocketLog($"删除本地缓存失败：{ex.Message}");
+            }
+            finally
+            {
+                DeleteLocalCacheButton.IsEnabled = true;
             }
         }
 

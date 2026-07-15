@@ -95,6 +95,13 @@
                     HorizontalOptions="Fill" />
             </Grid>
 
+            <Button
+                x:Name="DeleteLocalCacheButton"
+                Text="删除本地缓存"
+                BackgroundColor="#DC2626"
+                Clicked="OnDeleteLocalCacheClicked"
+                HorizontalOptions="Fill" />
+
             <Grid ColumnDefinitions="*,110">
                 <Editor
                     Grid.Column="0"

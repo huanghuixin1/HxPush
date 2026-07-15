@@ -93,6 +93,7 @@
                 x:Name="MessagesCollectionView"
                 Margin="0,2"
                 ItemsSource="{Binding Messages}"
+                ItemSizingStrategy="MeasureFirstItem"
                 SelectionMode="Single"
                 SelectionChanged="OnMessageSelected"
                 Scrolled="OnMessagesScrolled">
@@ -128,7 +129,7 @@
                         <Border
                             Margin="0,0,0,10"
                             Padding="16,14"
-                            MaximumHeightRequest="118"
+                            HeightRequest="118"
                             Stroke="#D7E6FF"
                             StrokeThickness="1"
                             BackgroundColor="#FFFFFFF2">
@@ -139,7 +140,7 @@
                                 <Shadow Brush="#1A2563EB" Offset="0,4" Radius="12" Opacity="0.12" />
                             </Border.Shadow>
 
-                            <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
+                            <Grid RowDefinitions="*,Auto" RowSpacing="10">
                                 <Label
                                     Text="{Binding Msg}"
                                     FontSize="17"

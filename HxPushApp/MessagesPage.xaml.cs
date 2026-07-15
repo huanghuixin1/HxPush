@@ -15,6 +15,7 @@ namespace HxPushApp
         private readonly SemaphoreSlim loadLock = new(1, 1);
         private readonly HxPushMessageApiClient messageApiClient = HxPushMessageApiClient.Instance;
         private readonly PushConnectionService pushConnectionService = PushConnectionService.Instance;
+        private readonly SqliteHelper sqliteHelper = SqliteHelper.Instance;
 
         private bool hasMoreMessages = true;
         private bool hasReachedRemoteEnd;
@@ -67,6 +68,7 @@ namespace HxPushApp
             DeviceFilterPicker.SelectedIndex = 0;
             isDeviceFilterInitialized = true;
             pushConnectionService.PushMessagesReceived += OnPushMessagesReceived;
+            sqliteHelper.DatabaseDeleted += OnLocalDatabaseDeleted;
             pushConnectionService.ConnectionStateChanged += OnConnectionStateChanged;
             UpdateConnectionStatus(pushConnectionService.IsConnected);
             Loaded += OnLoaded;
@@ -403,6 +405,32 @@ namespace HxPushApp
                 }
 
                 UpdateSummary();
+            });
+        }
+
+        private void OnLocalDatabaseDeleted(object? sender, EventArgs e)
+        {
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                Messages.Clear();
+                activeDeviceId = null;
+                hasMoreMessages = false;
+                hasReachedRemoteEnd = true;
+                LatestMessagesNotice.IsVisible = false;
+
+                isUpdatingDeviceFilters = true;
+                try
+                {
+                    DeviceFilters.Clear();
+                    DeviceFilters.Add(AllDevicesFilter);
+                    DeviceFilterPicker.SelectedIndex = 0;
+                }
+                finally
+                {
+                    isUpdatingDeviceFilters = false;
+                }
+
+                SummaryText = "本地缓存已删除";
             });
         }
 
