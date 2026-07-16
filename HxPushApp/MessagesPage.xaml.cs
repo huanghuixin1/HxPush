@@ -124,6 +124,9 @@ namespace HxPushApp
                 DeviceFilterPicker.IsEnabled = true;
                 isRefreshing = false;
             }
+
+            // 刷新指示器结束后再弹 Toast，避免和 loading 叠在一起一闪而过。
+            await ShowRemoteSyncErrorToastIfNeededAsync();
         }
 
         private async Task RefreshMessagesAsync()
@@ -255,10 +258,12 @@ namespace HxPushApp
                     : !hasReachedRemoteEnd;
                 UpdateSummary();
 
-                if (appendedCount == 0 && hasReachedRemoteEnd)
+                var shouldShowNoMore = string.IsNullOrWhiteSpace(remoteSyncError)
+                    && appendedCount == 0
+                    && hasReachedRemoteEnd;
+                if (shouldShowNoMore)
                 {
                     hasMoreMessages = false;
-                    await ShowNoMoreDataToastAsync();
                 }
             }
             catch
@@ -269,6 +274,15 @@ namespace HxPushApp
             {
                 IsLoadingMore = false;
                 loadLock.Release();
+            }
+
+            if (!string.IsNullOrWhiteSpace(remoteSyncError))
+            {
+                await ShowRemoteSyncErrorToastIfNeededAsync();
+            }
+            else if (!hasMoreMessages)
+            {
+                await ShowNoMoreDataToastAsync();
             }
         }
 
@@ -284,6 +298,13 @@ namespace HxPushApp
 
         private async Task<int?> TrySyncLatestMessagesFromServerAsync(string? hwid)
         {
+            // WS 未连接时不闪 loading，直接给出可停留的错误提示。
+            if (!pushConnectionService.IsConnected)
+            {
+                remoteSyncError = HxPushMessageApiClient.NotConnectedMessage;
+                return null;
+            }
+
             IsServerRequesting = true;
             LoadingText = "正在从服务端同步消息...";
 
@@ -305,7 +326,7 @@ namespace HxPushApp
             }
             catch (Exception ex)
             {
-                remoteSyncError = $"服务端同步失败：{ex.Message}";
+                remoteSyncError = FormatRemoteSyncError("服务端同步失败", ex);
                 return null;
             }
             finally
@@ -316,6 +337,12 @@ namespace HxPushApp
 
         private async Task<int?> TrySyncOlderMessagesFromServerAsync(HxPushMsgModel lastMessage)
         {
+            if (!pushConnectionService.IsConnected)
+            {
+                remoteSyncError = HxPushMessageApiClient.NotConnectedMessage;
+                return null;
+            }
+
             try
             {
                 return await Task.Run(async () =>
@@ -337,7 +364,7 @@ namespace HxPushApp
             }
             catch (Exception ex)
             {
-                remoteSyncError = $"服务端加载更多失败：{ex.Message}";
+                remoteSyncError = FormatRemoteSyncError("服务端加载更多失败", ex);
                 return null;
             }
         }
@@ -496,6 +523,19 @@ namespace HxPushApp
                 : $"已加载 {Messages.Count} 条本地消息，{remoteSyncError}";
         }
 
+        /// <summary>
+        /// 统一远端错误文案：WebSocket 未连接时只提示未连接到服务器，其它错误保留操作前缀。
+        /// </summary>
+        private static string FormatRemoteSyncError(string actionPrefix, Exception ex)
+        {
+            if (string.Equals(ex.Message, HxPushMessageApiClient.NotConnectedMessage, StringComparison.Ordinal))
+            {
+                return HxPushMessageApiClient.NotConnectedMessage;
+            }
+
+            return $"{actionPrefix}：{ex.Message}";
+        }
+
         private static IOrderedEnumerable<HxPushMsgModel> OrderMessagesDescending(
             IEnumerable<HxPushMsgModel> messages)
         {
@@ -504,25 +544,65 @@ namespace HxPushApp
                 .ThenByDescending(message => message.ID, StringComparer.Ordinal);
         }
 
+        /// <summary>
+        /// 远端同步错误用底部 Toast 展示，停留更久，避免只改 Summary 时用户看不清。
+        /// </summary>
+        private Task ShowRemoteSyncErrorToastIfNeededAsync()
+        {
+            if (string.IsNullOrWhiteSpace(remoteSyncError))
+            {
+                return Task.CompletedTask;
+            }
+
+            // 未连接提示停留更久；其它错误也至少 2 秒。
+            var durationMs = string.Equals(
+                    remoteSyncError,
+                    HxPushMessageApiClient.NotConnectedMessage,
+                    StringComparison.Ordinal)
+                ? 3200
+                : 2200;
+
+            return ShowStatusToastAsync(remoteSyncError, durationMs);
+        }
+
         private async Task ShowNoMoreDataToastAsync()
         {
-            if (isToastVisible || hasShownNoMoreToast)
+            if (hasShownNoMoreToast)
             {
                 return;
             }
 
-            isToastVisible = true;
             hasShownNoMoreToast = true;
+            await ShowStatusToastAsync("没有更多数据", 1800);
+        }
+
+        private async Task ShowStatusToastAsync(string message, int durationMs)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return;
+            }
+
+            // 已有 Toast 时先等它结束，避免后一条一闪而过。
+            while (isToastVisible)
+            {
+                await Task.Delay(50);
+            }
+
+            isToastVisible = true;
             try
             {
-                NoMoreDataToast.IsVisible = true;
-                await NoMoreDataToast.FadeToAsync(1, 150);
-                await Task.Delay(1500);
-                await NoMoreDataToast.FadeToAsync(0, 150);
+                StatusToastLabel.Text = message;
+                StatusToast.IsVisible = true;
+                StatusToast.Opacity = 0;
+                await StatusToast.FadeToAsync(1, 150);
+                await Task.Delay(durationMs);
+                await StatusToast.FadeToAsync(0, 150);
             }
             finally
             {
-                NoMoreDataToast.IsVisible = false;
+                StatusToast.IsVisible = false;
+                StatusToast.Opacity = 0;
                 isToastVisible = false;
             }
         }

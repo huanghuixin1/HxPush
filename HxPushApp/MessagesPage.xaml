@@ -62,10 +62,10 @@
 
         <Border
             Grid.Row="1"
-            Padding="14,5"
-            Stroke="#CFE0FF"
-            StrokeThickness="1"
-            BackgroundColor="#FFFFFFCC">
+            Padding="14,8"
+            Stroke="#2563EB"
+            StrokeThickness="1.5"
+            BackgroundColor="#EFF6FF">
             <Border.StrokeShape>
                 <RoundRectangle CornerRadius="16" />
             </Border.StrokeShape>
@@ -75,13 +75,27 @@
                     FontSize="13"
                     FontAttributes="Bold"
                     VerticalOptions="Center"
-                    TextColor="#2563EB" />
-                <Picker
-                    x:Name="DeviceFilterPicker"
+                    TextColor="#1D4ED8" />
+                <Border
                     Grid.Column="1"
-                    Title="选择设备"
-                    ItemsSource="{Binding DeviceFilters}"
-                    SelectedIndexChanged="OnDeviceFilterChanged" />
+                    Padding="10,2"
+                    Stroke="#ededed"
+                    StrokeThickness="1"
+                    BackgroundColor="White">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="10" />
+                    </Border.StrokeShape>
+                    <Picker
+                        x:Name="DeviceFilterPicker"
+                        Title="选择设备"
+                        TitleColor="#2563EB"
+                        TextColor="#333333"
+                        BackgroundColor="Transparent"
+                        HorizontalOptions="Fill"
+                        VerticalOptions="Center"
+                        ItemsSource="{Binding DeviceFilters}"
+                        SelectedIndexChanged="OnDeviceFilterChanged" />
+                </Border>
             </Grid>
         </Border>
 
@@ -229,7 +243,7 @@
         </Border>
 
         <Border
-            x:Name="NoMoreDataToast"
+            x:Name="StatusToast"
             Grid.RowSpan="3"
             Margin="0,0,0,24"
             Padding="16,10"
@@ -243,7 +257,7 @@
             <Border.StrokeShape>
                 <RoundRectangle CornerRadius="18" />
             </Border.StrokeShape>
-            <Label Text="没有更多数据" FontSize="14" TextColor="White" />
+            <Label x:Name="StatusToastLabel" Text="" FontSize="14" TextColor="White" />
         </Border>
 
         <Border
