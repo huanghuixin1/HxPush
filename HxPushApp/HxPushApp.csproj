@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFrameworks>net10.0-android;net10.0-windows10.0.19041.0</TargetFrameworks>
@@ -21,9 +21,7 @@
 		<!-- Display name -->
 		<ApplicationTitle>HxPushApp</ApplicationTitle>
 
-		<!-- App Identifier -->
-		<ApplicationId>com.companyname.hxpushapp</ApplicationId>
-
+		<!-- App Identifier：与 AndroidManifest package 一致 -->
 		<!-- Versions -->
 		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
 		<ApplicationVersion>1</ApplicationVersion>
@@ -32,31 +30,46 @@
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
 		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
 		<WindowsPackageType>None</WindowsPackageType>
+
+		<!-- 与 AndroidManifest package 保持一致，避免发布产物包名混乱 -->
+		<ApplicationId>com.huix.push</ApplicationId>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net10.0-android|AnyCPU'">
-	  <ApplicationId>com.huixing.push</ApplicationId>
+	<!--
+	  Visual Studio「存档/分发」期望 .apk。
+	  MAUI Android Release 默认常生成 .aab（Play 上架用），会导致：
+	  “创建应用存档失败 / Android 存档无效（不是 .apk 文件）”。
+	  这里统一产出 APK，便于本机安装与 VS 存档。
+	-->
+	<PropertyGroup Condition="$(TargetFramework.Contains('-android'))">
+		<AndroidPackageFormat>apk</AndroidPackageFormat>
+		<!-- 生成可直接安装的签名 APK（调试签名或你配置的 keystore） -->
+		<AndroidCreatePackagePerAbi>false</AndroidCreatePackagePerAbi>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net10.0-windows10.0.19041.0|AnyCPU'">
-	  <ApplicationId>com.huixing.push</ApplicationId>
+	<!--
+	  Release 若不签名，只会生成未签名 apk，安装时报：
+	  INSTALL_PARSE_FAILED_NO_CERTIFICATES
+	  以下默认用 Android 调试证书签名，便于本机/内测安装。
+	  上架或正式分发时，请改用自己的正式 keystore（见下方注释模板 / Signing.props）。
+	-->
+	<PropertyGroup Condition="$(TargetFramework.Contains('-android')) and '$(Configuration)' == 'Release'">
+		<AndroidKeyStore>true</AndroidKeyStore>
+		<AndroidSigningKeyStore>$(MSBuildThisFileDirectory)signing\hxpush-debug.keystore</AndroidSigningKeyStore>
+		<AndroidSigningStorePass>hxpushdebug</AndroidSigningStorePass>
+		<AndroidSigningKeyAlias>hxpush</AndroidSigningKeyAlias>
+		<AndroidSigningKeyPass>hxpushdebug</AndroidSigningKeyPass>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net10.0-android|AnyCPU'">
-	  <ApplicationId>com.huixing.push</ApplicationId>
-	  <AndroidPackageFormat>apk</AndroidPackageFormat>
-	</PropertyGroup>
-
-	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net10.0-windows10.0.19041.0|AnyCPU'">
-	  <ApplicationId>com.huixing.push</ApplicationId>
-	</PropertyGroup>
+	<!-- 若存在本地正式签名配置则覆盖上面的调试签名（文件勿提交仓库） -->
+	<Import Project="HxPushApp.Signing.props" Condition="Exists('HxPushApp.Signing.props')" />
 
 	<ItemGroup>
-		<!-- App Icon -->
-		<MauiIcon Include="Resources\AppIcon\iconhx.png" ForegroundFile="Resources\AppIcon\iconhx.png" Color="#512BD4" />
+		<!-- App Icon：单张位图不要再写 ForegroundFile（那是“背景+前景”两套资源用法） -->
+		<MauiIcon Include="Resources\AppIcon\iconhx.png" Color="#512BD4" />
 
-		<!-- Splash Screen -->
-		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
+		<!-- Splash Screen：不要写 ForegroundFile；资源名也要与 AppIcon 区分，避免 Android drawable/iconhx 冲突 -->
+		<MauiSplashScreen Include="Resources\Splash\iconhx_splash.png" Color="#512BD4" BaseSize="256,256" />
 
 		<!-- Images -->
 		<MauiImage Include="Resources\Images\*" />
@@ -87,4 +100,10 @@
 		</Compile>
 	</ItemGroup>
 
+
+	<ItemGroup>
+		<!-- 首页已从导航移除，停止编译遗留页面文件 -->
+		<Compile Remove="MainPage.xaml.cs" />
+		<MauiXaml Remove="MainPage.xaml" />
+	</ItemGroup>
 </Project>

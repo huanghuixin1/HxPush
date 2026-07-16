@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.StaticFiles;
+
 namespace HxPushServerWeb
 {
     // 应用入口：装配服务、中间件和 HTTP/WebSocket 路由。
@@ -42,8 +44,18 @@ namespace HxPushServerWeb
             await app.Services.GetRequiredService<HxPushMessageRepository>().InitializeAsync();
 
             // 中间件顺序保证静态文件和业务接口都能获得跨域响应头。
+            // 默认静态文件不认 .apk 等扩展名会 404；补 MIME，未知类型按二进制下载。
+            var contentTypeProvider = new FileExtensionContentTypeProvider();
+            contentTypeProvider.Mappings[".apk"] = "application/vnd.android.package-archive";
+            contentTypeProvider.Mappings[".aab"] = "application/octet-stream";
+
             app.UseCors();
-            app.UseStaticFiles();
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                ContentTypeProvider = contentTypeProvider,
+                ServeUnknownFileTypes = true,
+                DefaultContentType = "application/octet-stream"
+            });
             app.UseWebSockets();
 
             // Program 只负责路由转发，具体 HTTP/WebSocket 逻辑放到独立类。

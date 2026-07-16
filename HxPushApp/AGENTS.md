@@ -11,8 +11,8 @@
 - 每次完成任务后，在下面的「进度记录」追加一段总结。
 
 ## 重要文件
-- `AppShell.xaml` / `AppShell.xaml.cs`：底部 TabBar 和 Shell 路由注册。
-- `MainPage.xaml` / `MainPage.xaml.cs`：首页，“查看消息”按钮会跳到消息 tab。
+- `AppShell.xaml` / `AppShell.xaml.cs`：底部 TabBar（消息、设置）和 Shell 路由注册。
+- `App.xaml.cs`：启动流程——初始化 SQLite，每次打开自动连接一次；无 AppKey 或连接失败进设置，连接成功进消息。
 - `MessagesPage.xaml` / `MessagesPage.xaml.cs`：消息列表，从 SQLite 加载最近消息，支持下拉刷新与滚动分页。
 - `MessageDetailPage.xaml` / `MessageDetailPage.xaml.cs`：消息详情页，显示完整消息内容。
 - `Helpers/Sqlite/SqliteHelper.cs`：本地消息存储与按 `MsgDate + ID` 游标分页查询。
@@ -76,3 +76,10 @@
 - 2026-07-16：HTTP 消息拉取增加 WebSocket 连通前置条件；`HxPushMessageApiClient.GetMessagesAsync` 在 `PushConnectionService.IsConnected` 为 false 时立即抛出“未连接到服务器”，不再发 REST；`MessagesPage` 同步/加载更多失败时对该文案做直出展示。
 - 2026-07-16：修复“未连接到服务器”提示一闪而过：未连接时不再闪 loading 遮罩；错误改为底部 StatusToast 展示（约 3.2 秒），SummaryText 仍保留文案；Toast 在刷新指示器结束后再弹出，避免与下拉刷新/loading 重叠。
 - 2026-07-16：消息页设备筛选 Picker 提高可读性：外层与内层边框使用蓝色描边，标题/选中文字使用深蓝与深色文本，背景改为浅蓝底，避免手机上文字和边框看不清。
+- 2026-07-16：修复启动图配置错误。`MauiSplashScreen` 不能使用 `ForegroundFile`（仅 `MauiIcon` 支持背景+前景）；图标与启动图也不能共用同一 drawable 名 `iconhx`，否则 Android 出现 APT2260 `drawable/iconhx not found`。现改为 `MauiIcon` 用 `Resources/AppIcon/iconhx.png`，`MauiSplashScreen` 用 `Resources/Splash/iconhx_splash.png`。
+- 2026-07-16：交互优化：去掉首页 Tab；首次无 AppKey 进入设置；设置页“测试连接”改为“开始连接”，连接成功跳转消息；每次打开 APP 自动连接一次，成功进消息、失败进设置。
+- 2026-07-16：修复 VS 发布“创建应用存档失败 / Android 存档无效（不是 .apk）”：Android 目标统一 `AndroidPackageFormat=apk`（避免默认 aab 被存档管理器当成无效包）；`ApplicationId` 与 manifest package `com.huix.push` 对齐。本机可用 `dotnet publish -f net10.0-android -c Release -p:AndroidPackageFormat=apk` 产出 APK。
+- 2026-07-16：统一 Android 包名为 `com.huix.push`（`HxPushApp.csproj` 的 `ApplicationId` 与 `Platforms/Android/AndroidManifest.xml` 的 `package`），替换原 `com.huix.jb` / `com.huixing.push` / `com.companyname.hxpushapp`。
+- 2026-07-16：为本对话约定默认只处理 `HxPushServerWeb`；在 `HxPushServerWeb/run-linux.sh` 增加 Linux 后台启停脚本（start/stop/restart/status/log，默认端口 5212）。
+- 2026-07-16：`HxPushServerWeb` 静态文件支持 `.apk` 下载（补 MIME + ServeUnknownFileTypes），避免 `wwwroot/1.apk` 404。
+- 2026-07-16：修复 Release APK 无法安装 `INSTALL_PARSE_FAILED_NO_CERTIFICATES`：Release 未签名只会产出无 `-Signed` 的 apk。已为 Android Release 默认使用 debug.keystore 签名；正式证书可通过本地 `HxPushApp.Signing.props` 覆盖。安装时请用 `*-Signed.apk`，不要装未签名的 `.apk`。

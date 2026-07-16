@@ -1,0 +1,10 @@
+<Project>
+  <!-- 复制为 HxPushApp.Signing.props 并填写正式 keystore 信息（不要提交仓库） -->
+  <PropertyGroup Condition="$(TargetFramework.Contains('-android')) and '$(Configuration)' == 'Release'">
+    <AndroidKeyStore>true</AndroidKeyStore>
+    <AndroidSigningKeyStore>path\to\your.keystore</AndroidSigningKeyStore>
+    <AndroidSigningStorePass>YOUR_STORE_PASSWORD</AndroidSigningStorePass>
+    <AndroidSigningKeyAlias>YOUR_KEY_ALIAS</AndroidSigningKeyAlias>
+    <AndroidSigningKeyPass>YOUR_KEY_PASSWORD</AndroidSigningKeyPass>
+  </PropertyGroup>
+</Project>

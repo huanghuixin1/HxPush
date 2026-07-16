@@ -17,6 +17,7 @@
 - `wwwroot/appkeyManager.html`：只负责受密码保护的 AppKey 读取与编辑。
 - `wwwroot/webapi.html`：只负责 HTTP Web API 测试。
 - `wwwroot/ws-test.html`：只负责 WebSocket 连接、推送和接收测试。
+- `run-linux.sh`：Linux 后台启停脚本（start/stop/restart/status/log）；默认监听 `http://0.0.0.0:5212`，日志 `HxPushServerWeb.log`，pid `HxPushServerWeb.pid`。
 
 ## 已知问题
 
@@ -51,3 +52,5 @@
 - 2026-07-15: 消息分页接口和未读接口增加可选 `hwid` 精确筛选；留空仍查询 AppKey 下全部设备，填写后只返回并标记对应设备的消息，SQLite 同步增加 AppKey/Hwid/IsRead/MsgDate 组合索引，`webapi.html` 增加测试输入。
 - 2026-07-15: WebSocket 完成 AppKey 握手后会读取该 AppKey 的全部未读消息，并以 `HxPushMsgModel[]` JSON 数组一次性补发给新连接；只有发送成功才批量标记已读，同 AppKey 并发连接串行领取未读列表以减少重复补发。
 - 2026-07-15：`GET /api/messages` 新增 `beforemsgdate` 和 `beforeid` 游标参数，按 `MsgDate DESC, ID DESC` 获取指定消息之前的更旧数据；`pagesize` 服务端限制为最多 50 条，原 `pageindex/pagesize` 调用方式继续兼容，`wwwroot/webapi.html` 同步增加游标测试输入。
+- 2026-07-16：新增 `run-linux.sh`，用于 Linux 后台运行 HxPushServerWeb（nohup + pid/log）；支持 start/stop/restart/status/log；优先执行同目录可执行文件，否则 `dotnet HxPushServerWeb.dll`；默认 `ASPNETCORE_URLS=http://0.0.0.0:5212`。
+- 2026-07-16：静态文件支持 APK 等下载：`UseStaticFiles` 增加 `.apk` MIME（`application/vnd.android.package-archive`）与 `.aab`，并开启 `ServeUnknownFileTypes`（默认 `application/octet-stream`），避免 `wwwroot/1.apk` 访问 404。

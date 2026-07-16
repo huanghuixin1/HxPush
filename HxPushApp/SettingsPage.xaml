@@ -82,7 +82,7 @@
                 <Button
                     x:Name="WebSocketTestButton"
                     Grid.Column="0"
-                    Text="测试连接"
+                    Text="开始连接"
                     Clicked="OnWebSocketTestClicked"
                     HorizontalOptions="Fill" />
 

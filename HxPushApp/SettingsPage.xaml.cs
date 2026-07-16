@@ -250,7 +250,7 @@ namespace HxPushApp
         }
 
         /// <summary>
-        /// 使用已保存 AppKey 建立 WebSocket 测试连接并保持接收。
+        /// 使用已保存 AppKey 建立 WebSocket 连接并保持接收；成功后跳转到消息页。
         /// </summary>
         private async void OnWebSocketTestClicked(object? sender, EventArgs e)
         {
@@ -261,6 +261,12 @@ namespace HxPushApp
                 // AppKey 随握手 URL 提交，连接成功即表示服务端校验通过。
                 await pushConnectionService.ConnectAsync();
                 AppendWebSocketLog("AppKey 校验通过，连接已保持，正在持续接收服务端消息。");
+
+                if (pushConnectionService.IsConnected)
+                {
+                    await Shell.Current.GoToAsync("//MessagesPage");
+                    return;
+                }
             }
             catch (OperationCanceledException)
             {
@@ -277,7 +283,7 @@ namespace HxPushApp
         }
 
         /// <summary>
-        /// 根据连接状态切换测试连接和断开连接按钮。
+        /// 根据连接状态切换开始连接和断开连接按钮。
         /// </summary>
         private void UpdateWebSocketButtonStates(bool isConnected)
         {

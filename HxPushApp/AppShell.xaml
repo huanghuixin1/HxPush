@@ -12,11 +12,6 @@
 
     <TabBar>
         <ShellContent
-            Title="首页"
-            ContentTemplate="{DataTemplate local:MainPage}"
-            Route="MainPage" />
-
-        <ShellContent
             Title="消息"
             ContentTemplate="{DataTemplate local:MessagesPage}"
             Route="MessagesPage" />

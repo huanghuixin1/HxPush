@@ -73,3 +73,8 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 .DS_Store
+
+# Local Android signing secrets
+**/HxPushApp.Signing.props
+**/*.keystore
+**/*.jks
