@@ -1,12 +1,11 @@
-using System.Text.Json;
-using HxPushApp.models.Message;
-using HxPushModel.HttpRequest;
+﻿using HxPushApp.models.Message;
+using HxPushSdk;
 
 namespace HxPushApp.Helpers
 {
     /// <summary>
-    /// 远端消息 HTTP 客户端，只负责从服务端拉取消息。
-    /// 不直接写 SQLite，避免网络请求和本地存储耦合在一起。
+    /// 应用侧消息拉取入口：只负责 AppSettings 配置与超时，HTTP 实现全部委托 HxPushSdk.HxPushWebApiClient。
+    /// 不写 SQLite，保持网络与本地存储解耦。
     /// </summary>
     public sealed class HxPushMessageApiClient
     {
@@ -15,12 +14,9 @@ namespace HxPushApp.Helpers
         private static readonly Lazy<HxPushMessageApiClient> LazyInstance =
             new(() => new HxPushMessageApiClient());
 
-        private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-        {
-            PropertyNameCaseInsensitive = true
-        };
-
-        private readonly HttpClientHelper httpClientHelper = HttpClientHelper.Instance;
+        private readonly object clientSync = new();
+        private HxPushWebApiClient? webApiClient;
+        private string? boundServerAddress;
 
         private HxPushMessageApiClient()
         {
@@ -30,7 +26,7 @@ namespace HxPushApp.Helpers
 
         /// <summary>
         /// 拉取服务端最新消息，或按 MsgDate + ID 游标继续拉取更旧消息。
-        /// 单次请求最多等待 10 秒，超时由调用方转换为页面提示。
+        /// 单次请求最多等待 10 秒，超时由调用方转为页面提示。
         /// </summary>
         public async Task<IReadOnlyList<HxPushMsgModel>> GetMessagesAsync(
             int pageSize = MaxPageSize,
@@ -46,77 +42,36 @@ namespace HxPushApp.Helpers
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(RequestTimeout);
 
-            var requestUri = BuildMessagesRequestUri(
-                Math.Clamp(pageSize, 1, MaxPageSize),
-                hwid,
-                before);
-            var response = await httpClientHelper.GetJsonAsync<HxHttpResModel>(
-                requestUri,
-                timeout.Token).ConfigureAwait(false);
-
-            if (response.code != 0)
-            {
-                throw new InvalidOperationException(response.msg?.ToString() ?? "服务端返回失败。");
-            }
-
-            return DeserializeMessages(response.msg);
-        }
-
-        private static string BuildMessagesRequestUri(
-            int pageSize,
-            string? hwid,
-            HxPushMessageCursor? before)
-        {
-            var parameters = new List<string>
-            {
-                $"appkey={Uri.EscapeDataString(AppSettings.AppKey)}",
-                "pageindex=1",
-                $"pagesize={pageSize}"
-            };
-
-            if (!string.IsNullOrWhiteSpace(hwid))
-            {
-                parameters.Add($"hwid={Uri.EscapeDataString(hwid)}");
-            }
-
-            if (before is not null)
-            {
-                parameters.Add($"beforemsgdate={before.MsgDate}");
-                parameters.Add($"beforeid={Uri.EscapeDataString(before.ID)}");
-            }
-
-            return $"{GetHttpBaseAddress()}/api/messages?{string.Join("&", parameters)}";
+            var client = GetOrCreateClient();
+            return await client.GetMessagesAsync(
+                    AppSettings.AppKey,
+                    pageIndex: 1,
+                    pageSize: Math.Clamp(pageSize, 1, MaxPageSize),
+                    hwid: hwid,
+                    before: before,
+                    cancellationToken: timeout.Token)
+                .ConfigureAwait(false);
         }
 
         /// <summary>
-        /// 设置页保存的是 WebSocket 地址，这里转换为同服务的 HTTP Base URL。
+        /// 按当前 ServerAddress 复用 SDK 客户端；地址变更时丢弃旧实例并重建。
         /// </summary>
-        private static string GetHttpBaseAddress()
+        private HxPushWebApiClient GetOrCreateClient()
         {
-            var serverUri = new Uri(AppSettings.ServerAddress);
-            var scheme = serverUri.Scheme.Equals("wss", StringComparison.OrdinalIgnoreCase)
-                ? Uri.UriSchemeHttps
-                : Uri.UriSchemeHttp;
-
-            return $"{scheme}://{serverUri.Authority}";
-        }
-
-        private static IReadOnlyList<HxPushMsgModel> DeserializeMessages(object? value)
-        {
-            if (value is JsonElement element)
+            var serverAddress = AppSettings.ServerAddress;
+            lock (clientSync)
             {
-                return element.Deserialize<List<HxPushMsgModel>>(JsonOptions)
-                    ?? new List<HxPushMsgModel>();
-            }
+                if (webApiClient is not null
+                    && string.Equals(boundServerAddress, serverAddress, StringComparison.Ordinal))
+                {
+                    return webApiClient;
+                }
 
-            var json = JsonSerializer.Serialize(value, JsonOptions);
-            return JsonSerializer.Deserialize<List<HxPushMsgModel>>(json, JsonOptions)
-                ?? new List<HxPushMsgModel>();
+                webApiClient?.Dispose();
+                webApiClient = new HxPushWebApiClient(serverAddress);
+                boundServerAddress = serverAddress;
+                return webApiClient;
+            }
         }
     }
-
-    /// <summary>
-    /// 消息分页游标。排序规则与本地和服务端统一：MsgDate DESC, ID DESC。
-    /// </summary>
-    public sealed record HxPushMessageCursor(long MsgDate, string ID);
 }

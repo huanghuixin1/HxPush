@@ -78,6 +78,7 @@
 
 	<ItemGroup>
 	  <ProjectReference Include="..\HxPushModel\HxPushModel.csproj" />
+	  <ProjectReference Include="..\HxPushSdk\HxPushSdk.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

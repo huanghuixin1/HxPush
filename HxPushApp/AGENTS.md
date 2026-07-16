@@ -1,4 +1,4 @@
-﻿# Project Memory
+# Project Memory
 
 以后处理这个项目时，先读这个文件。
 
@@ -18,7 +18,8 @@
 - `Helpers/Sqlite/SqliteHelper.cs`：本地消息存储与按 `MsgDate + ID` 游标分页查询。
 - `Helpers/AppSettings.cs`：基于 MAUI `Preferences` 集中管理 AppKey 等非敏感本地键值配置。
 - `Helpers/PushConnectionService.cs`：应用级单例 WebSocket 连接，负责启动连接、持续接收并将推送写入 SQLite。
-- `Helpers/HttpClientHelper.cs`：应用级 HTTP 客户端，复用连接并统一处理 GET、POST JSON、自定义请求、取消和错误响应。
+- `Helpers/HxPushMessageApiClient.cs`：消息拉取薄封装，只负责 AppSettings（AppKey/服务器地址）与 10 秒超时，HTTP 实现委托 `HxPushSdk.HxPushWebApiClient`。
+- `HxPushSdk` 项目引用：所有面向 HxPushServerWeb 的 REST 请求统一走 SDK，避免 App 内重复 HTTP 代码。
 - `Converters/UnixTimestampToTimeConverter.cs`：将服务端 UTC Unix 毫秒时间戳转换为设备本地时间；今天显示“今天 HH:mm:ss”，1 到 30 天内显示“N天前 HH:mm:ss”，更早显示 `yyyy-MM-dd HH:mm:ss`。
 
 ## 已知问题
@@ -71,3 +72,4 @@
 - 2026-07-15：为 Android 消息列表优化滑动性能：消息卡片改为固定 `HeightRequest`，`CollectionView` 使用 `MeasureFirstItem` 复用测量结果。通过已连接真机的固定短距离往返滑动复测，超帧从 5.29% 降至 0.14%，90 分位帧时从 19ms 降至 12ms；保留渐变与阴影视觉效果。
 - 2026-07-15：消息列表卡片正文与元信息网格使用 `*,Auto` 行定义；当正文只有一行时，正文行会填满剩余空间，设备与日期信息稳定贴齐卡片底部。
 - 2026-07-15：设置页新增“删除本地缓存”按钮，二次确认后会关闭并删除 SQLite 数据库及 WAL/SHM 辅助文件；消息页订阅删除事件并同步清空内存列表与设备筛选项。
+- 2026-07-16：将 App 内 HTTP 请求改为使用 `HxPushSdk.HxPushWebApiClient`。`HxPushMessageApiClient` 仅保留 AppSettings 配置绑定、10 秒超时与服务器地址变更时的客户端复用；删除 `HttpClientHelper.cs` 与重复的消息反序列化/游标类型；`MessagesPage` 使用 SDK 的 `HxPushMessageCursor`；`HxPushApp.csproj` 增加对 `HxPushSdk` 的项目引用。
