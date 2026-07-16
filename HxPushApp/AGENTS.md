@@ -1,5 +1,8 @@
 # Project Memory
 
+## Latest Update
+- 2026-07-16: WebSocket pushes now send a `deliveryAck` only after SQLite persistence. Normal window and Android activity teardown attempt a close handshake, but forced Android process termination is intentionally not used to decide read status.
+
 以后处理这个项目时，先读这个文件。
 
 ## 项目信息
@@ -82,4 +85,5 @@
 - 2026-07-16：统一 Android 包名为 `com.huix.push`（`HxPushApp.csproj` 的 `ApplicationId` 与 `Platforms/Android/AndroidManifest.xml` 的 `package`），替换原 `com.huix.jb` / `com.huixing.push` / `com.companyname.hxpushapp`。
 - 2026-07-16：为本对话约定默认只处理 `HxPushServerWeb`；在 `HxPushServerWeb/run-linux.sh` 增加 Linux 后台启停脚本（start/stop/restart/status/log，默认端口 5212）。
 - 2026-07-16：`HxPushServerWeb` 静态文件支持 `.apk` 下载（补 MIME + ServeUnknownFileTypes），避免 `wwwroot/1.apk` 404。
+- 2026-07-16：`HxPushServerWeb` 新增消息管理页 `msgManager.html` 与独立 `HxPushMessageAdminHandler`（`/api/admin/messages*`）；支持 `sort=desc|asc` 按时间排序，默认倒序。
 - 2026-07-16：修复 Release APK 无法安装 `INSTALL_PARSE_FAILED_NO_CERTIFICATES`：Release 未签名只会产出无 `-Signed` 的 apk。已为 Android Release 默认使用 debug.keystore 签名；正式证书可通过本地 `HxPushApp.Signing.props` 覆盖。安装时请用 `*-Signed.apk`，不要装未签名的 `.apk`。

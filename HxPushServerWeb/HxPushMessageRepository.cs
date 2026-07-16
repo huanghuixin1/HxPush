@@ -199,35 +199,202 @@ namespace HxPushServerWeb
             return await ReadMessagesAsync(command, cancellationToken);
         }
 
-        // 单条推送成功后更新已读状态。
-        public Task MarkAsReadAsync(string id, CancellationToken cancellationToken)
+        // 管理端分页查询：不修改 IsRead；支持筛选；按 MsgDate 排序（默认倒序）。
+        public async Task<(IReadOnlyList<HxPushMsgModel> Messages, long Total)> QueryAdminPageAsync(
+            string? appKey,
+            string? hwid,
+            bool? isRead,
+            string? keyword,
+            bool sortDescending,
+            int pageIndex,
+            int pageSize,
+            CancellationToken cancellationToken)
         {
-            return MarkAsReadAsync(new[] { id }, cancellationToken);
+            await using var connection = CreateConnection();
+            await connection.OpenAsync(cancellationToken);
+
+            var whereSql = BuildAdminWhereClause(appKey, hwid, isRead, keyword, out var parameters);
+            // 仅允许 ASC/DESC，避免拼接用户输入。
+            var orderDirection = sortDescending ? "DESC" : "ASC";
+
+            await using (var countCommand = connection.CreateCommand())
+            {
+                countCommand.CommandText = $"SELECT COUNT(1) FROM HxPushMessages WHERE {whereSql};";
+                AddParameters(countCommand, parameters);
+                var total = Convert.ToInt64(await countCommand.ExecuteScalarAsync(cancellationToken));
+
+                await using var listCommand = connection.CreateCommand();
+                listCommand.CommandText =
+                    $"""
+                    SELECT ID, AppKey, Hwid, MsgDate, Msg, IsRead
+                    FROM HxPushMessages
+                    WHERE {whereSql}
+                    ORDER BY MsgDate {orderDirection}, ID {orderDirection}
+                    LIMIT $pageSize OFFSET $offset;
+                    """;
+                AddParameters(listCommand, parameters);
+                listCommand.Parameters.AddWithValue("$pageSize", pageSize);
+                listCommand.Parameters.AddWithValue("$offset", (long)(pageIndex - 1) * pageSize);
+
+                var messages = await ReadMessagesAsync(listCommand, cancellationToken);
+                return (messages, total);
+            }
         }
 
-        // 批量推送成功后在同一事务内更新全部消息，避免逐条建立数据库连接。
-        public async Task MarkAsReadAsync(
+        // 管理端按 ID 批量删除；空集合直接返回 0。
+        public async Task<int> DeleteByIdsAsync(
             IReadOnlyCollection<string> ids,
             CancellationToken cancellationToken)
         {
             var validIds = ids
                 .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim())
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
             if (validIds.Length == 0)
             {
-                return;
+                return 0;
             }
 
             await using var connection = CreateConnection();
             await connection.OpenAsync(cancellationToken);
             await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-            await MarkAsReadAsync(
-                connection,
-                (SqliteTransaction)transaction,
-                validIds,
-                cancellationToken);
+
+            var deleted = 0;
+            foreach (var batch in validIds.Chunk(500))
+            {
+                await using var command = connection.CreateCommand();
+                command.Transaction = (SqliteTransaction)transaction;
+
+                var parameterNames = batch
+                    .Select((_, index) => $"$id{index}")
+                    .ToArray();
+                command.CommandText =
+                    $"DELETE FROM HxPushMessages WHERE ID IN ({string.Join(", ", parameterNames)});";
+
+                for (var index = 0; index < batch.Length; index++)
+                {
+                    command.Parameters.AddWithValue(parameterNames[index], batch[index]);
+                }
+
+                deleted += await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+
             await transaction.CommitAsync(cancellationToken);
+            return deleted;
+        }
+
+        // 管理端按当前筛选条件删除，避免只能逐条删。
+        public async Task<int> DeleteByAdminFilterAsync(
+            string? appKey,
+            string? hwid,
+            bool? isRead,
+            string? keyword,
+            CancellationToken cancellationToken)
+        {
+            await using var connection = CreateConnection();
+            await connection.OpenAsync(cancellationToken);
+
+            var whereSql = BuildAdminWhereClause(appKey, hwid, isRead, keyword, out var parameters);
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"DELETE FROM HxPushMessages WHERE {whereSql};";
+            AddParameters(command, parameters);
+            return await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        private static string BuildAdminWhereClause(
+            string? appKey,
+            string? hwid,
+            bool? isRead,
+            string? keyword,
+            out List<KeyValuePair<string, object>> parameters)
+        {
+            parameters = [];
+            var clauses = new List<string> { "1 = 1" };
+
+            var normalizedAppKey = appKey?.Trim() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(normalizedAppKey))
+            {
+                clauses.Add("AppKey = $appKey");
+                parameters.Add(new KeyValuePair<string, object>("$appKey", normalizedAppKey));
+            }
+
+            var normalizedHwid = hwid?.Trim() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(normalizedHwid))
+            {
+                clauses.Add("Hwid = $hwid");
+                parameters.Add(new KeyValuePair<string, object>("$hwid", normalizedHwid));
+            }
+
+            if (isRead.HasValue)
+            {
+                clauses.Add("IsRead = $isRead");
+                parameters.Add(new KeyValuePair<string, object>("$isRead", isRead.Value ? 1 : 0));
+            }
+
+            var normalizedKeyword = keyword?.Trim() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(normalizedKeyword))
+            {
+                clauses.Add("Msg LIKE $keyword");
+                parameters.Add(new KeyValuePair<string, object>("$keyword", $"%{normalizedKeyword}%"));
+            }
+
+            return string.Join(" AND ", clauses);
+        }
+
+        private static void AddParameters(
+            SqliteCommand command,
+            IReadOnlyList<KeyValuePair<string, object>> parameters)
+        {
+            foreach (var parameter in parameters)
+            {
+                command.Parameters.AddWithValue(parameter.Key, parameter.Value);
+            }
+        }
+
+        // 客户端 ACK 后按 AppKey 范围批量更新已读状态，不能因跨 AppKey 的 ID 猜测而修改其它消息。
+        public async Task<int> MarkAsReadAsync(
+            string appKey,
+            IReadOnlyCollection<string> ids,
+            CancellationToken cancellationToken)
+        {
+            var normalizedAppKey = appKey?.Trim();
+            var validIds = ids
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (string.IsNullOrWhiteSpace(normalizedAppKey) || validIds.Length == 0)
+            {
+                return 0;
+            }
+
+            await using var connection = CreateConnection();
+            await connection.OpenAsync(cancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            var updated = 0;
+
+            foreach (var batch in validIds.Chunk(500))
+            {
+                await using var command = connection.CreateCommand();
+                command.Transaction = (SqliteTransaction)transaction;
+
+                var parameterNames = batch
+                    .Select((_, index) => $"$id{index}")
+                    .ToArray();
+                command.CommandText =
+                    $"UPDATE HxPushMessages SET IsRead = 1 WHERE AppKey = $appKey AND IsRead = 0 AND ID IN ({string.Join(", ", parameterNames)});";
+                command.Parameters.AddWithValue("$appKey", normalizedAppKey);
+
+                for (var index = 0; index < batch.Length; index++)
+                {
+                    command.Parameters.AddWithValue(parameterNames[index], batch[index]);
+                }
+
+                updated += await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            return updated;
         }
 
         // 在同一事务内完成查询和已读更新，避免并发读取重复消费未读消息。

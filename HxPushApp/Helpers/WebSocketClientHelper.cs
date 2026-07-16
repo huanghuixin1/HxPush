@@ -85,6 +85,9 @@ namespace HxPushApp.Helpers
             await DisconnectAsync();
 
             var socket = new ClientWebSocket();
+            // 心跳可更快发现被系统终止后遗留的 TCP 连接；已读正确性仍由业务 ACK 保证。
+            socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+            socket.Options.KeepAliveTimeout = TimeSpan.FromSeconds(10);
             var connectionUri = BuildConnectionUri(serverUri, normalizedAppKey);
             try
             {

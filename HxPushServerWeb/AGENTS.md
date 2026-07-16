@@ -1,5 +1,8 @@
 # Project Memory
 
+## Latest Update
+- 2026-07-16: 四个静态页（appkeyManager/msgManager/webapi/ws-test）顶部增加互相跳转导航栏，当前页高亮。
+
 以后处理这个项目时，先读这个文件。
 
 ## 项目信息
@@ -15,14 +18,17 @@
 - `HxPushAppKeyModel.cs`：AppKey 和备注的管理接口/持久化模型。
 - `HxPushAppKeyManager.cs`：缓存、读取和覆盖保存 AppKey，并校验管理密码。
 - `wwwroot/appkeyManager.html`：只负责受密码保护的 AppKey 读取与编辑。
+- `wwwroot/msgManager.html`：受管理密码保护的消息管理页（分页/筛选/时间排序/删除），调用 `/api/admin/messages*`；默认 `sort=desc`。
 - `wwwroot/webapi.html`：只负责 HTTP Web API 测试。
 - `wwwroot/ws-test.html`：只负责 WebSocket 连接、推送和接收测试。
+- `HxPushMessageAdminHandler.cs`：消息管理端 HTTP 接口（与客户端 `/api/messages` 分离，查询不改 IsRead）。
 - `run-linux.sh`：Linux 后台启停脚本（start/stop/restart/status/log）；默认监听 `http://0.0.0.0:5212`，日志 `HxPushServerWeb.log`，pid `HxPushServerWeb.pid`。
 
 ## 已知问题
 
 ## 进度记录
 
+- 2026-07-16：静态页顶部互跳：`appkeyManager.html` / `msgManager.html` / `webapi.html` / `ws-test.html` 统一增加 sticky 导航栏（`site-nav`），链接四页并高亮当前页。
 - 2026-07-14: 为 HxPushServerWeb 添加 ASP.NET Core 原生 WebSocket 简单实现。`/ws` 接收 WebSocket 连接并广播文本消息，`/api/push` 支持 HTTP POST 推送消息到所有连接，`/ws-test.html` 可用于浏览器手动测试。
 - 2026-07-14: 应学习需求将 WebSocket 实现精简为最小 Echo Server，并在 `Program.cs` 中加入分步骤中文注释。当前 `/ws` 只负责连接、接收文本、回发 `echo:` 文本，便于逐步理解。
 - 2026-07-14: 将 HxPushServerWeb 默认监听地址改为 `http://0.0.0.0:5212`，并同步更新 `launchSettings.json`，便于局域网设备或服务器外部流量访问。
@@ -54,3 +60,5 @@
 - 2026-07-15：`GET /api/messages` 新增 `beforemsgdate` 和 `beforeid` 游标参数，按 `MsgDate DESC, ID DESC` 获取指定消息之前的更旧数据；`pagesize` 服务端限制为最多 50 条，原 `pageindex/pagesize` 调用方式继续兼容，`wwwroot/webapi.html` 同步增加游标测试输入。
 - 2026-07-16：新增 `run-linux.sh`，用于 Linux 后台运行 HxPushServerWeb（nohup + pid/log）；支持 start/stop/restart/status/log；优先执行同目录可执行文件，否则 `dotnet HxPushServerWeb.dll`；默认 `ASPNETCORE_URLS=http://0.0.0.0:5212`。
 - 2026-07-16：静态文件支持 APK 等下载：`UseStaticFiles` 增加 `.apk` MIME（`application/vnd.android.package-archive`）与 `.aab`，并开启 `ServeUnknownFileTypes`（默认 `application/octet-stream`），避免 `wwwroot/1.apk` 访问 404。
+- 2026-07-16：新增消息管理：`HxPushMessageAdminHandler` + `GET/DELETE /api/admin/messages`、`DELETE /api/admin/messages/filter`（管理密码头 `X-AppKey-Manager-Password`）；仓储增加管理分页查询与按 ID/筛选删除（不改 IsRead）；静态页 `wwwroot/msgManager.html`；`webapi.html` 同步管理接口测试。
+- 2026-07-16：消息管理支持按时间排序：`GET /api/admin/messages` 增加 `sort=desc|asc`（默认 desc）；`msgManager.html` 增加时间排序下拉，切换后重新查询。

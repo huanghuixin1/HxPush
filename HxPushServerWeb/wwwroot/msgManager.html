@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>消息管理</title>
+  <style>
+    /* 管理页：密码鉴权后分页浏览/筛选/删除消息，不改客户端未读状态。 */
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f4f6f8;
+      color: #1d2939;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #f4f6f8;
+    }
+
+    main {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    h1, h2 {
+      margin: 0;
+      line-height: 1.25;
+    }
+
+    h1 { font-size: 24px; }
+    h2 { font-size: 16px; }
+
+    .state {
+      flex: 0 0 auto;
+      padding: 5px 9px;
+      border: 1px solid #cfd6df;
+      border-radius: 6px;
+      background: #fff;
+      color: #475467;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .state.unlocked {
+      border-color: #8ac7a0;
+      background: #edf9f1;
+      color: #176b38;
+    }
+
+    .panel {
+      padding: 18px;
+      border: 1px solid #d7dde5;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 8px 24px rgba(16, 24, 40, 0.06);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    input, select, button, textarea {
+      font: inherit;
+    }
+
+    input, select {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid #bfc8d4;
+      border-radius: 6px;
+      padding: 9px 11px;
+      background: #fff;
+      color: #1d2939;
+      outline: none;
+    }
+
+    input:focus, select:focus {
+      border-color: #16794a;
+      box-shadow: 0 0 0 3px rgba(22, 121, 74, 0.14);
+    }
+
+    input:disabled, select:disabled, button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    button {
+      min-height: 38px;
+      border: 0;
+      border-radius: 6px;
+      padding: 8px 14px;
+      background: #16794a;
+      color: #fff;
+      cursor: pointer;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    button.secondary { background: #344054; }
+    button.tertiary {
+      border: 1px solid #98a2b3;
+      background: #fff;
+      color: #344054;
+    }
+    button.danger {
+      background: #b42318;
+    }
+
+    .auth-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .filters {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #e4e7ec;
+    }
+
+    .filter-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 16px;
+      color: #667085;
+      font-size: 13px;
+    }
+
+    .table-wrap {
+      margin-top: 12px;
+      border: 1px solid #d7dde5;
+      border-radius: 6px;
+      overflow: auto;
+      max-height: min(62vh, 720px);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 900px;
+      font-size: 13px;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e4e7ec;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      color: #475467;
+      font-weight: 600;
+      z-index: 1;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .msg-cell {
+      max-width: 360px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge.read {
+      background: #edf9f1;
+      color: #176b38;
+    }
+
+    .badge.unread {
+      background: #fff4ed;
+      color: #b54708;
+    }
+
+    .row-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .row-actions button {
+      min-height: 30px;
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+
+    .pager {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .status {
+      min-height: 22px;
+      margin-top: 12px;
+      color: #475467;
+      font-size: 14px;
+    }
+
+    .status.success { color: #176b38; }
+    .status.error { color: #b42318; }
+
+    .empty {
+      padding: 40px 16px;
+      text-align: center;
+      color: #667085;
+    }
+
+    @media (max-width: 900px) {
+      .filters { grid-template-columns: 1fr 1fr; }
+      .auth-row { grid-template-columns: 1fr; }
+      .auth-row button { width: 100%; }
+    }
+  
+    /* 顶部页面互跳导航，便于管理/测试页来回切换。 */
+    .site-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 16px;
+      background: #fff;
+      border-bottom: 1px solid #d7dde5;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 0 rgba(16, 24, 40, 0.04);
+    }
+
+    .site-nav a {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border: 1px solid #d0d5dd;
+      border-radius: 6px;
+      background: #f9fafb;
+      color: #344054;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .site-nav a:hover {
+      background: #eef2f6;
+      border-color: #98a2b3;
+    }
+
+    .site-nav a.active {
+      background: #1d4ed8;
+      border-color: #1d4ed8;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <!-- 顶部互跳：AppKey/消息管理与 HTTP、WebSocket 测试页。 -->
+  <nav class="site-nav" aria-label="页面导航">
+    <a href="appkeyManager.html">AppKey 管理</a>
+    <a href="msgManager.html" class="active">消息管理</a>
+    <a href="webapi.html">Web API 测试</a>
+    <a href="ws-test.html">WebSocket 测试</a>
+  </nav>
+  <main>
+    <header>
+      <h1>消息管理</h1>
+      <span id="lockState" class="state">未验证</span>
+    </header>
+
+    <section class="panel">
+      <form id="managerForm">
+        <div class="auth-row">
+          <div>
+            <label for="password">管理密码</label>
+            <input id="password" type="password" autocomplete="current-password" required>
+          </div>
+          <button id="loadButton" class="secondary" type="submit">验证并加载</button>
+          <button id="clearPasswordButton" class="tertiary" type="button">清除记忆</button>
+        </div>
+
+        <div class="filters">
+          <div>
+            <label for="filterAppKey">AppKey（可选）</label>
+            <input id="filterAppKey" placeholder="留空=全部" autocomplete="off" disabled>
+          </div>
+          <div>
+            <label for="filterHwid">Hwid（可选）</label>
+            <input id="filterHwid" placeholder="留空=全部" autocomplete="off" disabled>
+          </div>
+          <div>
+            <label for="filterIsRead">已读状态</label>
+            <select id="filterIsRead" disabled>
+              <option value="">全部</option>
+              <option value="0">未读</option>
+              <option value="1">已读</option>
+            </select>
+          </div>
+          <div>
+            <label for="filterKeyword">正文关键字</label>
+            <input id="filterKeyword" placeholder="Msg 包含" autocomplete="off" disabled>
+          </div>
+          <div>
+            <label for="sortOrder">时间排序</label>
+            <select id="sortOrder" disabled>
+              <option value="desc" selected>倒序（新→旧）</option>
+              <option value="asc">正序（旧→新）</option>
+            </select>
+          </div>
+          <div>
+            <label for="pageSize">每页条数</label>
+            <select id="pageSize" disabled>
+              <option value="20">20</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="filter-actions">
+          <button id="queryButton" type="button" disabled>查询</button>
+          <button id="refreshButton" class="secondary" type="button" disabled>刷新本页</button>
+          <button id="deleteSelectedButton" class="danger" type="button" disabled>删除勾选</button>
+          <button id="deleteFilterButton" class="danger" type="button" disabled>按筛选删除</button>
+        </div>
+
+        <div class="meta">
+          <span id="summaryText">验证密码后加载消息</span>
+          <label style="display:flex;align-items:center;gap:8px;margin:0;font-weight:500;">
+            <input id="selectAll" type="checkbox" disabled style="width:auto;">
+            全选本页
+          </label>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:36px;"></th>
+                <th style="width:140px;">时间 <span id="sortHint" class="mono">↓</span></th>
+                <th style="width:120px;">AppKey</th>
+                <th style="width:140px;">Hwid</th>
+                <th style="width:70px;">状态</th>
+                <th>消息</th>
+                <th style="width:150px;">ID</th>
+                <th style="width:90px;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+          <div id="emptyState" class="empty">验证密码后加载消息</div>
+        </div>
+
+        <div class="pager">
+          <button id="prevButton" class="tertiary" type="button" disabled>上一页</button>
+          <button id="nextButton" class="tertiary" type="button" disabled>下一页</button>
+          <span id="pageInfo">第 1 页</span>
+        </div>
+
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    const passwordHeader = "X-AppKey-Manager-Password";
+    const listApi = "/api/admin/messages";
+    const deleteIdsApi = "/api/admin/messages";
+    const deleteFilterApi = "/api/admin/messages/filter";
+    const passwordStorageKey = "hxpush.message-manager.password";
+
+    const managerForm = document.querySelector("#managerForm");
+    const passwordInput = document.querySelector("#password");
+    const loadButton = document.querySelector("#loadButton");
+    const clearPasswordButton = document.querySelector("#clearPasswordButton");
+    const filterAppKey = document.querySelector("#filterAppKey");
+    const filterHwid = document.querySelector("#filterHwid");
+    const filterIsRead = document.querySelector("#filterIsRead");
+    const filterKeyword = document.querySelector("#filterKeyword");
+    const sortOrderSelect = document.querySelector("#sortOrder");
+    const pageSizeSelect = document.querySelector("#pageSize");
+    const queryButton = document.querySelector("#queryButton");
+    const refreshButton = document.querySelector("#refreshButton");
+    const deleteSelectedButton = document.querySelector("#deleteSelectedButton");
+    const deleteFilterButton = document.querySelector("#deleteFilterButton");
+    const selectAll = document.querySelector("#selectAll");
+    const rowsBody = document.querySelector("#rows");
+    const emptyState = document.querySelector("#emptyState");
+    const summaryText = document.querySelector("#summaryText");
+    const pageInfo = document.querySelector("#pageInfo");
+    const prevButton = document.querySelector("#prevButton");
+    const nextButton = document.querySelector("#nextButton");
+    const lockState = document.querySelector("#lockState");
+    const statusBox = document.querySelector("#status");
+
+    let verifiedPassword = "";
+    let hasRememberedPassword = false;
+    let isBusy = false;
+    let pageIndex = 1;
+    let total = 0;
+    let messages = [];
+    let selectedIds = new Set();
+
+    managerForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      unlockAndLoad();
+    });
+
+    queryButton.addEventListener("click", () => {
+      pageIndex = 1;
+      loadMessages();
+    });
+    sortOrderSelect.addEventListener("change", () => {
+      pageIndex = 1;
+      loadMessages();
+    });
+    refreshButton.addEventListener("click", () => loadMessages());
+    prevButton.addEventListener("click", () => {
+      if (pageIndex > 1) {
+        pageIndex -= 1;
+        loadMessages();
+      }
+    });
+    nextButton.addEventListener("click", () => {
+      const pageSize = Number(pageSizeSelect.value) || 50;
+      if (pageIndex * pageSize < total) {
+        pageIndex += 1;
+        loadMessages();
+      }
+    });
+    deleteSelectedButton.addEventListener("click", deleteSelected);
+    deleteFilterButton.addEventListener("click", deleteByFilter);
+    clearPasswordButton.addEventListener("click", clearRememberedPassword);
+    selectAll.addEventListener("change", () => {
+      if (selectAll.checked) {
+        messages.forEach(item => selectedIds.add(item.ID));
+      } else {
+        selectedIds.clear();
+      }
+      renderRows();
+    });
+
+    passwordInput.addEventListener("input", () => {
+      if (passwordInput.value !== verifiedPassword) {
+        lockEditor();
+      }
+    });
+
+    restoreRememberedPassword();
+    renderRows();
+
+    async function unlockAndLoad() {
+      const password = passwordInput.value;
+      if (!password) {
+        showStatus("请输入管理密码。", "error");
+        return;
+      }
+
+      verifiedPassword = password;
+      pageIndex = 1;
+      const ok = await loadMessages();
+      if (ok) {
+        rememberPassword(password);
+        unlockEditor();
+      } else {
+        verifiedPassword = "";
+        lockEditor();
+      }
+    }
+
+    async function loadMessages() {
+      if (!verifiedPassword) {
+        showStatus("请先验证管理密码。", "error");
+        return false;
+      }
+
+      setBusy(true);
+      try {
+        const query = buildFilterQuery();
+        query.set("pageindex", String(pageIndex));
+        query.set("pagesize", pageSizeSelect.value);
+
+        const response = await fetch(`${listApi}?${query}`, {
+          headers: { [passwordHeader]: verifiedPassword },
+          cache: "no-store"
+        });
+        const result = await readResult(response);
+
+        if (!response.ok || result.code !== 0 || !Array.isArray(result.msg)) {
+          if (response.status === 403) {
+            removeRememberedPassword();
+          }
+          throw new Error(getResultMessage(result, "读取失败。"));
+        }
+
+        messages = result.msg.map(normalizeMessage);
+        total = parseTotal(result.otherData);
+        selectedIds.clear();
+        renderRows();
+        showStatus("消息已加载。", "success");
+        return true;
+      } catch (error) {
+        showStatus(error.message, "error");
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function deleteSelected() {
+      const ids = [...selectedIds];
+      if (ids.length === 0) {
+        showStatus("请先勾选要删除的消息。", "error");
+        return;
+      }
+
+      if (!confirm(`确认删除勾选的 ${ids.length} 条消息？`)) {
+        return;
+      }
+
+      setBusy(true);
+      try {
+        const response = await fetch(deleteIdsApi, {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            [passwordHeader]: verifiedPassword
+          },
+          body: JSON.stringify({ ids }),
+          cache: "no-store"
+        });
+        const result = await readResult(response);
+        if (!response.ok || result.code !== 0) {
+          throw new Error(getResultMessage(result, "删除失败。"));
+        }
+
+        showStatus(`已删除：${result.otherData || ""}`, "success");
+        await loadMessages();
+      } catch (error) {
+        showStatus(error.message, "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function deleteByFilter() {
+      const query = buildFilterQuery();
+      const hasFilter = [...query.keys()].length > 0;
+      if (!hasFilter) {
+        if (!confirm("当前没有筛选条件，将删除全部消息。确认继续？")) {
+          return;
+        }
+        query.set("confirm", "all");
+      } else if (!confirm("确认删除当前筛选条件下的全部消息？")) {
+        return;
+      }
+
+      setBusy(true);
+      try {
+        const response = await fetch(`${deleteFilterApi}?${query}`, {
+          method: "DELETE",
+          headers: { [passwordHeader]: verifiedPassword },
+          cache: "no-store"
+        });
+        const result = await readResult(response);
+        if (!response.ok || result.code !== 0) {
+          throw new Error(getResultMessage(result, "删除失败。"));
+        }
+
+        pageIndex = 1;
+        showStatus(`按筛选删除完成：${result.otherData || ""}`, "success");
+        await loadMessages();
+      } catch (error) {
+        showStatus(error.message, "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function buildFilterQuery() {
+      const query = new URLSearchParams();
+      const appKey = filterAppKey.value.trim();
+      const hwid = filterHwid.value.trim();
+      const isRead = filterIsRead.value.trim();
+      const keyword = filterKeyword.value.trim();
+      const sort = sortOrderSelect.value.trim() || "desc";
+      if (appKey) query.set("appkey", appKey);
+      if (hwid) query.set("hwid", hwid);
+      if (isRead !== "") query.set("isread", isRead);
+      if (keyword) query.set("keyword", keyword);
+      query.set("sort", sort);
+      return query;
+    }
+
+    function renderRows() {
+      rowsBody.replaceChildren();
+      const unlocked = Boolean(verifiedPassword);
+
+      if (!messages.length) {
+        emptyState.style.display = "block";
+        emptyState.textContent = unlocked ? "暂无消息" : "验证密码后加载消息";
+      } else {
+        emptyState.style.display = "none";
+      }
+
+      messages.forEach(item => {
+        const tr = document.createElement("tr");
+
+        const tdCheck = document.createElement("td");
+        const check = document.createElement("input");
+        check.type = "checkbox";
+        check.checked = selectedIds.has(item.ID);
+        check.disabled = !unlocked || isBusy;
+        check.addEventListener("change", () => {
+          if (check.checked) selectedIds.add(item.ID);
+          else selectedIds.delete(item.ID);
+          updateSelectAllState();
+          updateControls();
+        });
+        tdCheck.append(check);
+
+        const tdTime = document.createElement("td");
+        tdTime.className = "mono";
+        tdTime.textContent = formatMsgDate(item.MsgDate);
+
+        const tdAppKey = document.createElement("td");
+        tdAppKey.className = "mono";
+        tdAppKey.textContent = item.AppKey;
+
+        const tdHwid = document.createElement("td");
+        tdHwid.className = "mono";
+        tdHwid.textContent = item.Hwid;
+
+        const tdRead = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.className = `badge ${item.IsRead ? "read" : "unread"}`;
+        badge.textContent = item.IsRead ? "已读" : "未读";
+        tdRead.append(badge);
+
+        const tdMsg = document.createElement("td");
+        tdMsg.className = "msg-cell";
+        tdMsg.textContent = item.Msg;
+
+        const tdId = document.createElement("td");
+        tdId.className = "mono";
+        tdId.textContent = item.ID;
+
+        const tdAct = document.createElement("td");
+        const actions = document.createElement("div");
+        actions.className = "row-actions";
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "danger";
+        del.textContent = "删除";
+        del.disabled = !unlocked || isBusy;
+        del.addEventListener("click", async () => {
+          if (!confirm("确认删除该条消息？")) return;
+          selectedIds = new Set([item.ID]);
+          await deleteSelected();
+        });
+        actions.append(del);
+        tdAct.append(actions);
+
+        tr.append(tdCheck, tdTime, tdAppKey, tdHwid, tdRead, tdMsg, tdId, tdAct);
+        rowsBody.append(tr);
+      });
+
+      const pageSize = Number(pageSizeSelect.value) || 50;
+      const pageCount = Math.max(1, Math.ceil(total / pageSize) || 1);
+      const sortDesc = (sortOrderSelect.value || "desc") === "desc";
+      const sortHint = document.querySelector("#sortHint");
+      if (sortHint) {
+        sortHint.textContent = sortDesc ? "↓" : "↑";
+      }
+      summaryText.textContent = unlocked
+        ? `共 ${total} 条，本页 ${messages.length} 条，时间${sortDesc ? "倒序" : "正序"}`
+        : "验证密码后加载消息";
+      pageInfo.textContent = `第 ${pageIndex} / ${pageCount} 页`;
+      updateSelectAllState();
+      updateControls();
+    }
+
+    function updateSelectAllState() {
+      if (!messages.length) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+        return;
+      }
+      const selectedCount = messages.filter(item => selectedIds.has(item.ID)).length;
+      selectAll.checked = selectedCount === messages.length;
+      selectAll.indeterminate = selectedCount > 0 && selectedCount < messages.length;
+    }
+
+    function normalizeMessage(value) {
+      return {
+        ID: String(value?.ID ?? value?.id ?? ""),
+        AppKey: String(value?.AppKey ?? value?.appKey ?? ""),
+        Hwid: String(value?.Hwid ?? value?.hwid ?? ""),
+        MsgDate: Number(value?.MsgDate ?? value?.msgDate ?? 0),
+        Msg: String(value?.Msg ?? value?.msg ?? ""),
+        IsRead: Boolean(value?.IsRead ?? value?.isRead)
+      };
+    }
+
+    function parseTotal(otherData) {
+      const text = String(otherData || "");
+      const match = text.match(/total=(\d+)/i);
+      return match ? Number(match[1]) : messages.length;
+    }
+
+    function formatMsgDate(ms) {
+      if (!ms || ms < 1) return "-";
+      const date = new Date(ms);
+      if (Number.isNaN(date.getTime())) return String(ms);
+      const pad = n => String(n).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    }
+
+    async function readResult(response) {
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error(text || `HTTP ${response.status}`);
+      }
+    }
+
+    function getResultMessage(result, fallback) {
+      return typeof result?.msg === "string" ? result.msg : fallback;
+    }
+
+    function rememberPassword(password) {
+      try {
+        localStorage.setItem(passwordStorageKey, password);
+        hasRememberedPassword = true;
+      } catch {
+        hasRememberedPassword = false;
+      }
+    }
+
+    function restoreRememberedPassword() {
+      try {
+        const password = localStorage.getItem(passwordStorageKey) || "";
+        passwordInput.value = password;
+        hasRememberedPassword = Boolean(password);
+      } catch {
+        hasRememberedPassword = false;
+      }
+    }
+
+    function removeRememberedPassword() {
+      try {
+        localStorage.removeItem(passwordStorageKey);
+      } catch {
+        // ignore
+      }
+      hasRememberedPassword = false;
+    }
+
+    function clearRememberedPassword() {
+      removeRememberedPassword();
+      passwordInput.value = "";
+      lockEditor();
+      showStatus("已清除浏览器中保存的管理密码。", "success");
+    }
+
+    function lockEditor() {
+      verifiedPassword = "";
+      messages = [];
+      total = 0;
+      pageIndex = 1;
+      selectedIds.clear();
+      lockState.textContent = "未验证";
+      lockState.className = "state";
+      renderRows();
+    }
+
+    function unlockEditor() {
+      lockState.textContent = "已验证";
+      lockState.className = "state unlocked";
+      updateControls();
+    }
+
+    function setBusy(value) {
+      isBusy = value;
+      updateControls();
+    }
+
+    function updateControls() {
+      const unlocked = Boolean(verifiedPassword);
+      const pageSize = Number(pageSizeSelect.value) || 50;
+      passwordInput.disabled = isBusy;
+      loadButton.disabled = isBusy;
+      clearPasswordButton.disabled = isBusy || (!hasRememberedPassword && !passwordInput.value);
+      [filterAppKey, filterHwid, filterIsRead, filterKeyword, sortOrderSelect, pageSizeSelect].forEach(el => {
+        el.disabled = !unlocked || isBusy;
+      });
+      queryButton.disabled = !unlocked || isBusy;
+      refreshButton.disabled = !unlocked || isBusy;
+      deleteSelectedButton.disabled = !unlocked || isBusy || selectedIds.size === 0;
+      deleteFilterButton.disabled = !unlocked || isBusy;
+      selectAll.disabled = !unlocked || isBusy || messages.length === 0;
+      prevButton.disabled = !unlocked || isBusy || pageIndex <= 1;
+      nextButton.disabled = !unlocked || isBusy || pageIndex * pageSize >= total;
+    }
+
+    function showStatus(message, state) {
+      statusBox.textContent = message;
+      statusBox.className = `status ${state}`;
+    }
+  </script>
+</body>
+</html>

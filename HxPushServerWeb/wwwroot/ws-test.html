@@ -202,9 +202,54 @@
         grid-template-columns: 1fr;
       }
     }
+  
+    /* 顶部页面互跳导航，便于管理/测试页来回切换。 */
+    .site-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 16px;
+      background: #fff;
+      border-bottom: 1px solid #d7dde5;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 0 rgba(16, 24, 40, 0.04);
+    }
+
+    .site-nav a {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border: 1px solid #d0d5dd;
+      border-radius: 6px;
+      background: #f9fafb;
+      color: #344054;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .site-nav a:hover {
+      background: #eef2f6;
+      border-color: #98a2b3;
+    }
+
+    .site-nav a.active {
+      background: #1d4ed8;
+      border-color: #1d4ed8;
+      color: #fff;
+    }
   </style>
 </head>
 <body>
+  <!-- 顶部互跳：AppKey/消息管理与 HTTP、WebSocket 测试页。 -->
+  <nav class="site-nav" aria-label="页面导航">
+    <a href="appkeyManager.html">AppKey 管理</a>
+    <a href="msgManager.html">消息管理</a>
+    <a href="webapi.html">Web API 测试</a>
+    <a href="ws-test.html" class="active">WebSocket 测试</a>
+  </nav>
   <main>
     <header>
       <h1>HxPush WebSocket 测试</h1>

@@ -39,7 +39,7 @@ namespace HxPushServerWeb
             {
                 code = 0,
                 msg = "HxPushServerWeb is running.",
-                otherData = "Open /ws-test.html for WebSocket or /webapi.html for HTTP APIs."
+                otherData = "Open /ws-test.html, /webapi.html, /appkeyManager.html or /msgManager.html."
             });
         }
 
@@ -99,22 +99,14 @@ namespace HxPushServerWeb
                 return ToJsonResult(Error($"ID 已存在，不能重复写入：{message.ID}"));
             }
 
-            message.IsRead = true;
             var pushCount = await webSocketHandler.SendToAppKeyAsync(message, cancellationToken);
-            if (pushCount > 0)
-            {
-                await messageRepository.MarkAsReadAsync(message.ID, cancellationToken);
-            }
-            else
-            {
-                message.IsRead = false;
-            }
 
             return ToJsonResult(new HxHttpResModel
             {
                 code = 0,
                 msg = "保存成功",
-                otherData = $"ID={message.ID}; pushed={pushCount}; isRead={message.IsRead.ToString().ToLowerInvariant()}"
+                // SendAsync 只代表数据已交给系统缓冲区；实际已读状态必须等待 App 写入 SQLite 后回 ACK。
+                otherData = $"ID={message.ID}; pushed={pushCount}; delivery=ackRequired"
             });
         }
 

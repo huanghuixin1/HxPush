@@ -14,6 +14,7 @@ namespace HxPushApp
             var shell = new AppShell();
             var window = new Window(shell);
             window.Created += async (_, _) => await InitializeStartupAsync(shell);
+            window.Destroying += async (_, _) => await Helpers.PushConnectionService.Instance.DisconnectAsync();
             return window;
         }
 

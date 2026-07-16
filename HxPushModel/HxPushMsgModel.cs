@@ -26,7 +26,7 @@ namespace HxPushApp.models.Message
         public string Msg { get; set; } = string.Empty;
 
         /// <summary>
-        /// 消息是否已成功推送或被接口读取。
+        /// 消息是否已被客户端确认持久化，或已被 HTTP 查询接口读取。
         /// </summary>
         public bool IsRead { get; set; }
     }

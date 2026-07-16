@@ -180,9 +180,54 @@
         grid-template-columns: 1fr;
       }
     }
+  
+    /* 顶部页面互跳导航，便于管理/测试页来回切换。 */
+    .site-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 16px;
+      background: #fff;
+      border-bottom: 1px solid #d7dde5;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 0 rgba(16, 24, 40, 0.04);
+    }
+
+    .site-nav a {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border: 1px solid #d0d5dd;
+      border-radius: 6px;
+      background: #f9fafb;
+      color: #344054;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .site-nav a:hover {
+      background: #eef2f6;
+      border-color: #98a2b3;
+    }
+
+    .site-nav a.active {
+      background: #1d4ed8;
+      border-color: #1d4ed8;
+      color: #fff;
+    }
   </style>
 </head>
 <body>
+  <!-- 顶部互跳：AppKey/消息管理与 HTTP、WebSocket 测试页。 -->
+  <nav class="site-nav" aria-label="页面导航">
+    <a href="appkeyManager.html">AppKey 管理</a>
+    <a href="msgManager.html">消息管理</a>
+    <a href="webapi.html" class="active">Web API 测试</a>
+    <a href="ws-test.html">WebSocket 测试</a>
+  </nav>
   <main>
     <h1>HxPush Web API 测试</h1>
 
@@ -240,6 +285,9 @@
               <option value="/api/messages" data-method="POST">POST /api/messages</option>
               <option value="/api/appkeys" data-method="GET">GET /api/appkeys</option>
               <option value="/api/appkeys" data-method="PUT">PUT /api/appkeys</option>
+              <option value="/api/admin/messages" data-method="GET">GET /api/admin/messages</option>
+              <option value="/api/admin/messages" data-method="DELETE">DELETE /api/admin/messages</option>
+              <option value="/api/admin/messages/filter" data-method="DELETE">DELETE /api/admin/messages/filter</option>
               <option value="/ws" data-method="GET">GET /ws 普通 HTTP</option>
             </select>
           </div>
@@ -249,6 +297,7 @@
               <option value="GET">GET</option>
               <option value="POST">POST</option>
               <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
             </select>
           </div>
         </div>
@@ -267,6 +316,7 @@
           <button id="sendHttpButton" type="button">发送请求</button>
           <button id="fillMessageButton" class="secondary" type="button">消息示例</button>
           <button id="fillAppKeysButton" class="secondary" type="button">AppKey 示例</button>
+          <button id="fillAdminDeleteIdsButton" class="secondary" type="button">管理删除 ID 示例</button>
           <button id="clearBodyButton" class="secondary" type="button">清空</button>
         </div>
       </section>
@@ -296,6 +346,7 @@
     const sendHttpButton = document.querySelector("#sendHttpButton");
     const fillMessageButton = document.querySelector("#fillMessageButton");
     const fillAppKeysButton = document.querySelector("#fillAppKeysButton");
+    const fillAdminDeleteIdsButton = document.querySelector("#fillAdminDeleteIdsButton");
     const clearBodyButton = document.querySelector("#clearBodyButton");
     const httpResponseBox = document.querySelector("#httpResponse");
 
@@ -308,6 +359,7 @@
     sendHttpButton.addEventListener("click", sendHttpRequest);
     fillMessageButton.addEventListener("click", fillSampleMessage);
     fillAppKeysButton.addEventListener("click", fillSampleAppKeys);
+    fillAdminDeleteIdsButton.addEventListener("click", fillAdminDeleteIds);
     clearBodyButton.addEventListener("click", () => requestBodyInput.value = "");
 
     function getDefaultHttpBaseUrl() {
@@ -342,6 +394,14 @@
         { AppKey: "app-demo", Remark: getToday() },
         { AppKey: "app-mobile", Remark: "移动端测试" }
       ], null, 2);
+    }
+
+    // 填充管理端按 ID 删除请求体。
+    function fillAdminDeleteIds() {
+      selectApiOption("/api/admin/messages", "DELETE");
+      requestBodyInput.value = JSON.stringify({
+        ids: ["replace-with-message-id"]
+      }, null, 2);
     }
 
     function selectApiOption(path, method) {
@@ -421,17 +481,37 @@
       const headers = {};
       const options = { method };
 
-      if (path === "/api/appkeys") {
+      const needsManagerPassword =
+        path === "/api/appkeys" ||
+        path === "/api/admin/messages" ||
+        path === "/api/admin/messages/filter";
+
+      if (needsManagerPassword) {
         const password = managerPasswordInput.value;
         if (!password) {
-          renderHttpResponse("AppKey 管理密码不能为空。", true);
+          renderHttpResponse("管理密码不能为空。", true);
           return;
         }
 
         headers["X-AppKey-Manager-Password"] = password;
       }
 
-      if (method !== "GET") {
+      let requestUrl = `${baseUrl}${path}`;
+      if (path === "/api/admin/messages" && method === "GET") {
+        const query = new URLSearchParams({
+          pageindex: listPageIndexInput.value || "1",
+          pagesize: listPageSizeInput.value || "20",
+          sort: "desc"
+        });
+        const appKey = listAppKeyInput.value.trim();
+        if (appKey) {
+          query.set("appkey", appKey);
+        }
+        appendOptionalHwid(query);
+        requestUrl = `${baseUrl}${path}?${query}`;
+      }
+
+      if (method === "POST" || method === "PUT" || (method === "DELETE" && path === "/api/admin/messages")) {
         headers["Content-Type"] = "application/json";
         options.body = requestBodyInput.value;
       }
@@ -440,7 +520,7 @@
         options.headers = headers;
       }
 
-      await executeRequest(`${baseUrl}${path}`, options);
+      await executeRequest(requestUrl, options);
     }
 
     async function executeRequest(url, options) {

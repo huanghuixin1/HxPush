@@ -115,7 +115,7 @@ namespace HxPushServerWeb
             return sentCount;
         }
 
-        // 将全部未读消息作为一个 JSON 数组发给新连接，成功后才批量标记已读。
+        // 将全部未读消息作为一个 JSON 数组发给新连接；必须等待客户端落库后的 ACK 才能标记已读。
         private async Task SendUnreadMessagesAsync(
             WebSocketClient client,
             CancellationToken cancellationToken)
@@ -137,12 +137,6 @@ namespace HxPushServerWeb
                     return;
                 }
 
-                // 当前发送即完成投递，客户端收到的模型与随后写入的数据库状态保持一致。
-                foreach (var message in unreadMessages)
-                {
-                    message.IsRead = true;
-                }
-
                 var json = JsonSerializer.Serialize(unreadMessages, JsonOptions);
                 if (!await SendTextAsync(client, json, cancellationToken))
                 {
@@ -150,12 +144,8 @@ namespace HxPushServerWeb
                     return;
                 }
 
-                await messageRepository.MarkAsReadAsync(
-                    unreadMessages.Select(message => message.ID).ToArray(),
-                    cancellationToken);
-
                 Console.WriteLine(
-                    $"WebSocket 未读消息补发：client={client.Id}, appKey={client.AppKey}, count={unreadMessages.Count}");
+                    $"WebSocket 未读消息已发送，等待 ACK：client={client.Id}, appKey={client.AppKey}, count={unreadMessages.Count}");
             }
             finally
             {
@@ -173,6 +163,17 @@ namespace HxPushServerWeb
                 if (text is null)
                 {
                     break;
+                }
+
+                if (TryParseDeliveryAcknowledgement(text, out var acknowledgement))
+                {
+                    var acknowledgedCount = await messageRepository.MarkAsReadAsync(
+                        client.AppKey,
+                        acknowledgement.MessageIds ?? Array.Empty<string>(),
+                        cancellationToken);
+                    Console.WriteLine(
+                        $"WebSocket 消息 ACK：client={client.Id}, appKey={client.AppKey}, acknowledged={acknowledgedCount}");
+                    continue;
                 }
 
                 HxPushMsgModel? message;
@@ -223,6 +224,34 @@ namespace HxPushServerWeb
                 var pushCount = await SendToAppKeyAsync(message, cancellationToken);
 
                 Console.WriteLine($"WebSocket 消息推送：client={client.Id}, appKey={client.AppKey}, pushed={pushCount}");
+            }
+        }
+
+        // ACK 与业务消息共享一条 WebSocket，使用 Type 字段区分，避免另建连接或把 ACK 当作推送消息转发。
+        private static bool TryParseDeliveryAcknowledgement(
+            string text,
+            out HxPushDeliveryAckModel acknowledgement)
+        {
+            acknowledgement = new HxPushDeliveryAckModel();
+
+            try
+            {
+                var parsed = JsonSerializer.Deserialize<HxPushDeliveryAckModel>(text, JsonOptions);
+                if (parsed is null ||
+                    !string.Equals(
+                        parsed.Type,
+                        HxPushDeliveryAckModel.DeliveryAcknowledgementType,
+                        StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                acknowledgement = parsed;
+                return true;
+            }
+            catch (JsonException)
+            {
+                return false;
             }
         }
 

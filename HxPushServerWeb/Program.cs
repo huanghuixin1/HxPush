@@ -8,6 +8,7 @@ namespace HxPushServerWeb
         // 初始化并运行 ASP.NET Core Web 服务。
         public static async Task Main(string[] args)
         {
+            Console.WriteLine("当前版本： 1.0");
             var builder = WebApplication.CreateBuilder(args);
 
             // 默认监听所有网卡；局域网设备用本机 IP 访问，例如：
@@ -27,6 +28,7 @@ namespace HxPushServerWeb
             builder.Services.AddSingleton(new HxPushAppKeyManager(appKeyFilePath, appKeyPasswordFilePath));
             builder.Services.AddSingleton<HxPushHttpHandler>();
             builder.Services.AddSingleton<HxPushWebSocketHandler>();
+            builder.Services.AddSingleton<HxPushMessageAdminHandler>();
 
             // 使用默认策略统一覆盖当前和后续新增的 HTTP 路由。
             builder.Services.AddCors(options =>
@@ -56,7 +58,12 @@ namespace HxPushServerWeb
                 ServeUnknownFileTypes = true,
                 DefaultContentType = "application/octet-stream"
             });
-            app.UseWebSockets();
+            // Ping/Pong 心跳会主动清理强杀后未立即断开的连接，避免它长期留在在线客户端集合中。
+            app.UseWebSockets(new WebSocketOptions
+            {
+                KeepAliveInterval = TimeSpan.FromSeconds(15),
+                KeepAliveTimeout = TimeSpan.FromSeconds(10)
+            });
 
             // Program 只负责路由转发，具体 HTTP/WebSocket 逻辑放到独立类。
             app.MapGet("/", (HxPushHttpHandler handler) => handler.HandleIndex());
@@ -70,6 +77,13 @@ namespace HxPushServerWeb
                 handler.HandleGetAppKeys(request));
             app.MapPut("/api/appkeys", (HttpRequest request, HxPushHttpHandler handler, CancellationToken cancellationToken) =>
                 handler.HandleReplaceAppKeysAsync(request, cancellationToken));
+            // 消息管理端接口单独由 HxPushMessageAdminHandler 处理，与客户端消息 API 解耦。
+            app.MapGet("/api/admin/messages", (HttpRequest request, HxPushMessageAdminHandler handler, CancellationToken cancellationToken) =>
+                handler.HandleGetMessagesAsync(request, cancellationToken));
+            app.MapDelete("/api/admin/messages", (HttpRequest request, HxPushMessageAdminHandler handler, CancellationToken cancellationToken) =>
+                handler.HandleDeleteByIdsAsync(request, cancellationToken));
+            app.MapDelete("/api/admin/messages/filter", (HttpRequest request, HxPushMessageAdminHandler handler, CancellationToken cancellationToken) =>
+                handler.HandleDeleteByFilterAsync(request, cancellationToken));
             app.Map("/ws", async (HttpContext context, HxPushWebSocketHandler handler) =>
                 await handler.HandleAsync(context));
 

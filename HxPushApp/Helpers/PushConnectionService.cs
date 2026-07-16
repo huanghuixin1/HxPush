@@ -106,10 +106,22 @@ namespace HxPushApp.Helpers
                 await sqliteHelper.SaveMessagesAsync(pushMessages);
                 PushMessagesReceived?.Invoke(this, pushMessages);
                 RaiseLogMessage($"已保存消息：{pushMessages.Count} 条");
+
+                // SQLite 写入成功才确认投递；强杀或断网导致 ACK 未送达时，服务端会在下次连接后重发。
+                var acknowledgement = new HxPushDeliveryAckModel
+                {
+                    MessageIds = pushMessages
+                        .Select(pushMessage => pushMessage.ID)
+                        .Where(id => !string.IsNullOrWhiteSpace(id))
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray()
+                };
+                await webSocketClient.SendTextAsync(
+                    JsonSerializer.Serialize(acknowledgement, JsonOptions));
             }
             catch (Exception ex)
             {
-                RaiseLogMessage($"保存消息失败：{ex.Message}");
+                RaiseLogMessage($"保存消息或发送 ACK 失败：{ex.Message}");
             }
         }
 
