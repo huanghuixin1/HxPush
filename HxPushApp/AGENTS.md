@@ -1,6 +1,8 @@
 # Project Memory
 
 ## Latest Update
+- 2026-07-17: 真机启动闪退修复：根因是 MAUI 默认 `Theme.MaterialComponents.DayNight` + 系统深色/强制深色时，Shell `BottomNavigationView` 的 `itemTextAppearance` 为空导致 NPE。修复：1) 新增 `Platforms/Android/Resources/values/styles.xml`，用 `Theme.MaterialComponents.Light.DarkActionBar` 覆盖 `Maui.MainTheme*`，并给底部导航显式指定 `TextAppearance.AppCompat.Caption`；2) `colors.xml` 补 `colorActionMenuTextColor`；3) `MainApplication` 静态构造 + `OnCreate`（在 `base` 前）设 `ModeNightNo`；4) `MainActivity.OnCreate` 再设一次；5) Android 禁止在 `App` 构造设 `UserAppTheme`（仅 Windows）；6) manifest `forceDarkAllowed=false`。
+- 2026-07-17: The App uses a consistent light-blue theme. Android sets `AppCompatDelegate.ModeNightNo` early (static ctor / before Activity), disables forced dark mode, and uses native blue colors (`#2563EB`, `#1D4ED8`, `#38BDF8`); Windows sets MAUI `UserAppTheme` to Light. Do not set Android `UserAppTheme` in the MAUI `App` constructor: on some devices it leaves Shell's Material bottom navigation without a valid TextAppearance and crashes at startup.
 - 2026-07-17: A successful manual connection navigates with a one-time Shell parameter; the Messages page consumes it and shows its existing bottom Toast with `连接成功` for 1500 ms after navigation.
 - 2026-07-17: Settings connection actions now use dedicated visual states: enabled Connect is high-contrast blue, enabled Disconnect is high-contrast red, and disabled actions use muted gray backgrounds, text, and borders in both light and dark themes.
 - 2026-07-16: WebSocket pushes now send a `deliveryAck` only after SQLite persistence. Normal window and Android activity teardown attempt a close handshake, but forced Android process termination is intentionally not used to decide read status.
@@ -17,7 +19,9 @@
 
 ## 重要文件
 - `AppShell.xaml` / `AppShell.xaml.cs`：底部 TabBar（消息、设置）和 Shell 路由注册。
-- `App.xaml.cs`：启动流程——初始化 SQLite，每次打开自动连接一次；无 AppKey 或连接失败进设置，连接成功进消息。
+- `App.xaml.cs`：启动流程——初始化 SQLite，每次打开自动连接一次；无 AppKey 或连接失败进设置，连接成功进消息。Android 勿在构造期设 `UserAppTheme`。
+- `Platforms/Android/Resources/values/styles.xml`：覆盖 `Maui.MainTheme*` 为固定浅色，并配置 `HxPushBottomNavigationView` 的 item TextAppearance，防止真机启动 NPE。
+- `Platforms/Android/MainApplication.cs` / `MainActivity.cs`：尽早 `AppCompatDelegate.ModeNightNo`。
 - `MessagesPage.xaml` / `MessagesPage.xaml.cs`：消息列表，从 SQLite 加载最近消息，支持下拉刷新与滚动分页。
 - `MessageDetailPage.xaml` / `MessageDetailPage.xaml.cs`：消息详情页，显示完整消息内容。
 - `Helpers/Sqlite/SqliteHelper.cs`：本地消息存储与按 `MsgDate + ID` 游标分页查询。
@@ -89,3 +93,4 @@
 - 2026-07-16：`HxPushServerWeb` 静态文件支持 `.apk` 下载（补 MIME + ServeUnknownFileTypes），避免 `wwwroot/1.apk` 404。
 - 2026-07-16：`HxPushServerWeb` 新增消息管理页 `msgManager.html` 与独立 `HxPushMessageAdminHandler`（`/api/admin/messages*`）；支持 `sort=desc|asc` 按时间排序，默认倒序。
 - 2026-07-16：修复 Release APK 无法安装 `INSTALL_PARSE_FAILED_NO_CERTIFICATES`：Release 未签名只会产出无 `-Signed` 的 apk。已为 Android Release 默认使用 debug.keystore 签名；正式证书可通过本地 `HxPushApp.Signing.props` 覆盖。安装时请用 `*-Signed.apk`，不要装未签名的 `.apk`。
+- 2026-07-17：修复真机打开即闪退。Android 覆盖 MAUI 默认 DayNight 为主题 `Light.DarkActionBar`，底部导航强制 TextAppearance；`ModeNightNo` 提前到 Application 静态构造与 Activity.OnCreate；补 `colorActionMenuTextColor`；Android 不在 App 构造设置 `UserAppTheme`。

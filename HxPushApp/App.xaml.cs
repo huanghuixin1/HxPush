@@ -7,6 +7,12 @@ namespace HxPushApp
         public App()
         {
             InitializeComponent();
+#if WINDOWS
+            // Windows 可直接固定 MAUI 浅色主题。
+            // 切勿在 Android 上于 App 构造期设置 UserAppTheme：部分真机会让 Shell
+            // Material 底部导航拿不到 TextAppearance，启动即闪退。
+            UserAppTheme = AppTheme.Light;
+#endif
         }
 
         protected override Window CreateWindow(IActivationState? activationState)

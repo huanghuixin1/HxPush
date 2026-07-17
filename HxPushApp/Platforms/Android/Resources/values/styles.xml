@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      强制浅色 Material 主题，避免 DayNight 在部分真机（系统强制深色 / 启动瞬间主题未就绪）上
+      导致 Shell BottomNavigationView 解析 itemTextAppearance 为 null 而启动闪退。
+      名称与 MAUI 内置主题一致，构建时覆盖默认 DayNight 主题。
+    -->
+    <style name="Maui.MainTheme.Base" parent="Theme.MaterialComponents.Light.DarkActionBar">
+        <item name="maui_edgetoedge_optout">true</item>
+        <item name="maui_splash">false</item>
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:actionMenuTextColor">@color/colorActionMenuTextColor</item>
+        <item name="appBarLayoutStyle">@style/MauiAppBarLayout</item>
+        <item name="bottomNavigationViewStyle">@style/HxPushBottomNavigationView</item>
+        <item name="materialButtonStyle">@style/MauiMaterialButton</item>
+        <item name="checkboxStyle">@style/MauiCheckBox</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="alertDialogTheme">@style/MauiAlertDialogTheme</item>
+        <item name="materialAlertDialogTheme">@style/MauiAlertDialogTheme</item>
+    </style>
+
+    <style name="Maui.MainTheme" parent="Maui.MainTheme.Base" />
+
+    <style name="Maui.MainTheme.NoActionBar" parent="Maui.MainTheme">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="windowActionModeOverlay">true</item>
+        <item name="android:actionModeBackground">?attr/colorPrimary</item>
+        <item name="android:actionModeStyle">@style/ActionMode</item>
+    </style>
+
+    <!-- 明确指定底部导航文字样式，防止 OEM 主题裁剪后 TextAppearance 为空。 -->
+    <style name="HxPushBottomNavigationView" parent="Widget.Design.BottomNavigationView">
+        <item name="itemTextAppearanceActive">@style/TextAppearance.AppCompat.Caption</item>
+        <item name="itemTextAppearanceInactive">@style/TextAppearance.AppCompat.Caption</item>
+    </style>
+</resources>
