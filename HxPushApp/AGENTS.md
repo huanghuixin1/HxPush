@@ -1,6 +1,8 @@
 # Project Memory
 
 ## Latest Update
+- 2026-07-17: A successful manual connection navigates with a one-time Shell parameter; the Messages page consumes it and shows its existing bottom Toast with `连接成功` for 1500 ms after navigation.
+- 2026-07-17: Settings connection actions now use dedicated visual states: enabled Connect is high-contrast blue, enabled Disconnect is high-contrast red, and disabled actions use muted gray backgrounds, text, and borders in both light and dark themes.
 - 2026-07-16: WebSocket pushes now send a `deliveryAck` only after SQLite persistence. Normal window and Android activity teardown attempt a close handshake, but forced Android process termination is intentionally not used to decide read status.
 
 以后处理这个项目时，先读这个文件。

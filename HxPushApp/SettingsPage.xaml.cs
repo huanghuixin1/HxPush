@@ -264,7 +264,11 @@ namespace HxPushApp
 
                 if (pushConnectionService.IsConnected)
                 {
-                    await Shell.Current.GoToAsync("//MessagesPage");
+                    var navigationParameters = new ShellNavigationQueryParameters
+                    {
+                        [MessagesPage.ConnectionSuccessToastQueryKey] = true
+                    };
+                    await Shell.Current.GoToAsync("//MessagesPage", navigationParameters);
                     return;
                 }
             }

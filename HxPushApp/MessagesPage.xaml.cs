@@ -8,10 +8,11 @@ using HxPushApp.models.Message;
 
 namespace HxPushApp
 {
-    public partial class MessagesPage : ContentPage, INotifyPropertyChanged
+    public partial class MessagesPage : ContentPage, INotifyPropertyChanged, IQueryAttributable
     {
         private const int PageSize = 50;
         private const string AllDevicesFilter = "全部设备";
+        internal const string ConnectionSuccessToastQueryKey = "connectionSuccessToast";
 
         private readonly SemaphoreSlim loadLock = new(1, 1);
         private readonly HxPushMessageApiClient messageApiClient = HxPushMessageApiClient.Instance;
@@ -79,6 +80,23 @@ namespace HxPushApp
         {
             Loaded -= OnLoaded;
             await RefreshFromUiAsync();
+        }
+
+        /// <summary>
+        /// 接收设置页连接成功后的一次性导航提示，并在消息页完成切换后显示 Toast。
+        /// </summary>
+        public void ApplyQueryAttributes(IDictionary<string, object> query)
+        {
+            if (!query.TryGetValue(ConnectionSuccessToastQueryKey, out var value) || value is not true)
+            {
+                return;
+            }
+
+            Dispatcher.Dispatch(async () =>
+            {
+                await Task.Delay(100);
+                await ShowStatusToastAsync("连接成功", 1500);
+            });
         }
 
         private async void OnRefreshing(object? sender, EventArgs e)
