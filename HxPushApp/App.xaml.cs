@@ -14,8 +14,31 @@ namespace HxPushApp
             var shell = new AppShell();
             var window = new Window(shell);
             window.Created += async (_, _) => await InitializeStartupAsync(shell);
+            // 解锁/从后台回到前台：检查 WS 是否掉线并自动补连。
+            window.Resumed += async (_, _) => await OnAppResumedAsync();
             window.Destroying += async (_, _) => await Helpers.PushConnectionService.Instance.DisconnectAsync();
             return window;
+        }
+
+        /// <summary>
+        /// Android 等平台生命周期恢复（含锁屏后回到应用）。
+        /// </summary>
+        protected override void OnResume()
+        {
+            base.OnResume();
+            _ = OnAppResumedAsync();
+        }
+
+        private static async Task OnAppResumedAsync()
+        {
+            try
+            {
+                await Helpers.PushConnectionService.Instance.EnsureConnectedAsync();
+            }
+            catch
+            {
+                // 前台补连失败由服务内部日志与退避重试处理，不打断 UI。
+            }
         }
 
         /// <summary>

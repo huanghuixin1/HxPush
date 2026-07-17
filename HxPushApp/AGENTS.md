@@ -20,7 +20,7 @@
 - `MessageDetailPage.xaml` / `MessageDetailPage.xaml.cs`：消息详情页，显示完整消息内容。
 - `Helpers/Sqlite/SqliteHelper.cs`：本地消息存储与按 `MsgDate + ID` 游标分页查询。
 - `Helpers/AppSettings.cs`：基于 MAUI `Preferences` 集中管理 AppKey 等非敏感本地键值配置。
-- `Helpers/PushConnectionService.cs`：应用级单例 WebSocket 连接，负责启动连接、持续接收并将推送写入 SQLite。
+- `Helpers/PushConnectionService.cs`：应用级 WebSocket；连接成功后 maintainConnection=true，意外断开退避重连，前台恢复时 EnsureConnectedAsync 补连；主动断开关闭自动重连。
 - `Helpers/HxPushMessageApiClient.cs`：消息拉取薄封装，只负责 AppSettings（AppKey/服务器地址）、WebSocket 已连接校验与 10 秒超时，HTTP 实现委托 `HxPushSdk.HxPushWebApiClient`；未连接时提示“未连接到服务器”。
 - `HxPushSdk` 项目引用：所有面向 HxPushServerWeb 的 REST 请求统一走 SDK，避免 App 内重复 HTTP 代码。
 - `Converters/UnixTimestampToTimeConverter.cs`：将服务端 UTC Unix 毫秒时间戳转换为设备本地时间；今天显示“今天 HH:mm:ss”，1 到 30 天内显示“N天前 HH:mm:ss”，更早显示 `yyyy-MM-dd HH:mm:ss`。
